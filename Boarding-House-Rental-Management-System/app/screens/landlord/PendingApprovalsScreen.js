@@ -1,3 +1,4 @@
+import ScreenSkeleton from '../../components/ScreenSkeleton';
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -75,14 +76,7 @@ export default function PendingApprovalsScreen() {
     }
   };
 
-  if (loading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
-        <ActivityIndicator size="large" color={colors.accent} />
-        <Text style={{ fontSize: fs(15), color: colors.textSecondary, marginTop: 12 }}>Loading pending approvals...</Text>
-      </View>
-    );
-  }
+  if (loading) return <ScreenSkeleton />;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -237,3 +231,4 @@ export default function PendingApprovalsScreen() {
     </View>
   );
 }
+

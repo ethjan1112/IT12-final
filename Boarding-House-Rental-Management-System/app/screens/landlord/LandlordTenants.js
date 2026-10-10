@@ -1,12 +1,13 @@
+import ScreenSkeleton from '../../components/ScreenSkeleton';
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Modal, TextInput, ActivityIndicator, Pressable, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../utils/ThemeContext';
 import { isMobile, getResponsivePadding, fs, spacing, cardStyle } from '../../utils/responsive';
-import { getAllTenantsForManagement, addTenant, updateTenant, deleteTenant, getVacantRoomsForAssignment, createLease, terminateLease, getPendingTenantRegistrations } from '../../services/dataService';
+import { getAllTenantsForManagement, addTenant, updateTenant, deleteTenant, getVacantRoomsForAssignment, createLease, terminateLease, getPendingTenantRegistrations, getPendingTenantRegistrationCount } from '../../services/dataService';
 import TenantApprovalModal from '../../components/landlord/TenantApprovalModal';
 
-export default function OwnerTenants() {
+export default function OwnerTenants({ onPendingSignupsChange }) {
   const { colors } = useTheme();
   const padding = getResponsivePadding();
   const [tenants, setTenants] = useState([]);
@@ -47,7 +48,9 @@ export default function OwnerTenants() {
 
   const loadPendingSignups = async () => {
     try {
-      setPendingSignups(await getPendingTenantRegistrations());
+      const signups = await getPendingTenantRegistrations();
+      setPendingSignups(signups);
+      onPendingSignupsChange?.(await getPendingTenantRegistrationCount());
     } catch (err) {
       console.error('Failed to load tenant sign-ups:', err);
     }
@@ -77,6 +80,7 @@ export default function OwnerTenants() {
     setSelectedSignup(null);
     setSignupModalVisible(false);
     await loadTenants();
+    await loadPendingSignups();
   };
 
   const handleSaveTenant = async () => {
@@ -163,7 +167,7 @@ export default function OwnerTenants() {
     ]);
   };
 
-  if (loading) return (<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}><ActivityIndicator size="large" color={colors.accent} /></View>);
+  if (loading) return <ScreenSkeleton />;
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: padding, paddingTop: isMobile ? 16 : 24, paddingBottom: 24 }}>
@@ -260,7 +264,9 @@ export default function OwnerTenants() {
         <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }} onPress={() => setSignupModalVisible(false)}>
           <Pressable style={{ width: isMobile ? '90%' : 520, maxHeight: '80%', backgroundColor: colors.card, borderRadius: 16, padding: 24 }} onPress={e => e.stopPropagation()}>
             <Text style={{ fontSize: fs(20), fontWeight: '800', color: colors.text, marginBottom: 16 }}>Tenant Sign-ups</Text>
-            {loadingSignups ? <ActivityIndicator size="large" color={colors.accent} /> : pendingSignups.length === 0 ? (
+            {loadingSignups ? <View style={{ gap: 10, paddingVertical: 12 }}>
+              {[0, 1, 2].map((item) => <View key={item} style={{ height: 58, borderRadius: 10, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder, padding: 12, justifyContent: 'center', gap: 8 }}><View style={{ width: '48%', height: 11, borderRadius: 6, backgroundColor: colors.cardBorder }} /><View style={{ width: '72%', height: 9, borderRadius: 5, backgroundColor: colors.cardBorder }} /></View>)}
+            </View> : pendingSignups.length === 0 ? (
               <Text style={{ fontSize: fs(15), color: colors.textMuted, paddingVertical: 24, textAlign: 'center' }}>No tenant sign-ups are waiting for approval.</Text>
             ) : (
               <ScrollView style={{ maxHeight: 420 }}>
@@ -344,3 +350,4 @@ export default function OwnerTenants() {
     </View>
   );
 }
+

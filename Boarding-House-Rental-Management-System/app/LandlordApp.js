@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StatusBar, TouchableOpacity, Platform, Modal, Pressable, Text, ScrollView, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { isDesktop, isMobile, safeAreaTop, fs, spacing } from './utils/responsive';
@@ -22,13 +22,33 @@ import PaymentProofReviewScreen from './screens/landlord/PaymentProofReviewScree
 
 // Import navigation
 import LandlordBottomNav from './components/LandlordBottomNav';
+import { getPendingTenantRegistrationCount } from './services/dataService';
 
 export default function LandlordApp({ user, onLogout }) {
   const [activeScreen, setActiveScreen] = useState('dashboard');
   const [menuVisible, setMenuVisible] = useState(false);
   const [slideAnim] = useState(new Animated.Value(-280));
   const [navigationParams, setNavigationParams] = useState(null);
+  const [pendingTenantSignupCount, setPendingTenantSignupCount] = useState(0);
   const { isDark, toggleTheme, colors } = useTheme();
+
+  useEffect(() => {
+    let isMounted = true;
+    const refreshSignupCount = async () => {
+      try {
+        const count = await getPendingTenantRegistrationCount();
+        if (isMounted) setPendingTenantSignupCount(count);
+      } catch (error) {
+        console.warn('Could not refresh tenant sign-up badge:', error.message || error);
+      }
+    };
+    refreshSignupCount();
+    const refreshTimer = setInterval(refreshSignupCount, 30000);
+    return () => {
+      isMounted = false;
+      clearInterval(refreshTimer);
+    };
+  }, []);
 
   const getScreenTitle = () => {
     switch (activeScreen) {
@@ -87,7 +107,7 @@ export default function LandlordApp({ user, onLogout }) {
       case 'dashboard':
         return <LandlordDashboard />;
       case 'tenants':
-        return <LandlordTenants />;
+        return <LandlordTenants onPendingSignupsChange={setPendingTenantSignupCount} />;
       case 'rooms':
         return <LandlordRooms />;
       case 'billing':
@@ -158,13 +178,13 @@ export default function LandlordApp({ user, onLogout }) {
 
       {isDesktop ? (
         <View style={{ flex: 1, flexDirection: 'row' }}>
-          <LandlordBottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} user={user} />
+          <LandlordBottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} user={user} pendingTenantSignupCount={pendingTenantSignupCount} pendingApprovalsCount={pendingTenantSignupCount} />
           <View style={{ flex: 1 }}>{renderScreen()}</View>
         </View>
       ) : (
         <>
           <View style={{ flex: 1 }}>{renderScreen()}</View>
-          <LandlordBottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} user={user} />
+          <LandlordBottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} user={user} pendingTenantSignupCount={pendingTenantSignupCount} pendingApprovalsCount={pendingTenantSignupCount} />
         </>
       )}
 

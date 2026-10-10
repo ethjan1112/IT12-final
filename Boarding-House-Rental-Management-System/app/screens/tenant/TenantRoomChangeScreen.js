@@ -1,3 +1,4 @@
+import ScreenSkeleton from '../../components/ScreenSkeleton';
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -81,13 +82,7 @@ export default function TenantRoomChangeScreen({ user }) {
       ? { label: 'Declined', color: colors.dangerText, bg: colors.dangerBg }
       : { label: 'Pending review', color: colors.warningText, bg: colors.warningBg };
 
-  if (loading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
-        <ActivityIndicator size="large" color={colors.accent} />
-      </View>
-    );
-  }
+  if (loading) return <ScreenSkeleton />;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -209,3 +204,4 @@ export default function TenantRoomChangeScreen({ user }) {
     </View>
   );
 }
+

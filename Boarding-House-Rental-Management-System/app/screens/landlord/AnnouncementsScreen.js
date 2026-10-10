@@ -1,3 +1,4 @@
+import ScreenSkeleton from '../../components/ScreenSkeleton';
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -120,13 +121,7 @@ export default function AnnouncementsScreen() {
     }
   };
 
-  if (loading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
-        <ActivityIndicator size="large" color={colors.accent} />
-      </View>
-    );
-  }
+  if (loading) return <ScreenSkeleton />;
 
   if (error) {
     return (
@@ -491,3 +486,4 @@ export default function AnnouncementsScreen() {
     </View>
   );
 }
+

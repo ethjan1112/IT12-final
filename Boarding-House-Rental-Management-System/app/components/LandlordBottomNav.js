@@ -4,8 +4,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { isDesktop, fs } from '../utils/responsive';
 import { useTheme } from '../utils/ThemeContext';
 
-export default function LandlordBottomNav({ user, activeScreen, onNavigate }) {
+export default function LandlordBottomNav({ user, activeScreen, onNavigate, pendingTenantSignupCount = 0, pendingApprovalsCount = 0 }) {
   const { colors } = useTheme();
+  const getBadgeCount = (item) => item.id === 'approvals'
+    ? pendingApprovalsCount
+    : item.id === 'tenants' ? pendingTenantSignupCount : 0;
+  const getBadgeDescription = (item) => item.id === 'approvals' ? 'pending approvals' : 'new sign-ups';
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'home', iconOutline: 'home-outline' },
@@ -45,12 +49,13 @@ export default function LandlordBottomNav({ user, activeScreen, onNavigate }) {
 
         {navItems.map((item) => {
           const isActive = activeScreen === item.id;
+          const badgeCount = getBadgeCount(item);
           return (
             <TouchableOpacity
               key={item.id}
               activeOpacity={0.82}
               accessibilityRole="button"
-              accessibilityLabel={`Navigate to ${item.label}`}
+              accessibilityLabel={`Navigate to ${item.label}${badgeCount > 0 ? `, ${badgeCount} ${getBadgeDescription(item)}` : ''}`}
               accessibilityState={{ selected: isActive }}
               style={{
                 flexDirection: 'row',
@@ -67,11 +72,18 @@ export default function LandlordBottomNav({ user, activeScreen, onNavigate }) {
               }}
               onPress={() => onNavigate(item.id)}
             >
-              <Ionicons
-                name={isActive ? item.icon : item.iconOutline}
-                size={21}
-                color={isActive ? colors.ownerAccent : colors.textSecondary}
-              />
+              <View style={{ position: 'relative' }}>
+                <Ionicons
+                  name={isActive ? item.icon : item.iconOutline}
+                  size={21}
+                  color={isActive ? colors.ownerAccent : colors.textSecondary}
+                />
+                {badgeCount > 0 && (
+                  <View style={{ position: 'absolute', top: -8, right: -12, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9, backgroundColor: colors.dangerText, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.sidebarBg }}>
+                    <Text style={{ color: '#fff', fontSize: 10, lineHeight: 12, fontWeight: '800' }}>{badgeCount > 99 ? '99+' : badgeCount}</Text>
+                  </View>
+                )}
+              </View>
               <Text style={{
                 fontSize: fs(13),
                 fontWeight: isActive ? '700' : '500',
@@ -99,12 +111,13 @@ export default function LandlordBottomNav({ user, activeScreen, onNavigate }) {
     }}>
       {navItems.map((item) => {
         const isActive = activeScreen === item.id;
+        const badgeCount = getBadgeCount(item);
         return (
           <TouchableOpacity
             key={item.id}
             activeOpacity={0.82}
             accessibilityRole="button"
-            accessibilityLabel={`Navigate to ${item.label}`}
+            accessibilityLabel={`Navigate to ${item.label}${badgeCount > 0 ? `, ${badgeCount} ${getBadgeDescription(item)}` : ''}`}
             accessibilityState={{ selected: isActive }}
             style={{ flex: 1, alignItems: 'center', paddingVertical: 3, minHeight: 50, justifyContent: 'center', borderRadius: 26, overflow: 'hidden' }}
             onPress={() => onNavigate(item.id)}
@@ -115,7 +128,6 @@ export default function LandlordBottomNav({ user, activeScreen, onNavigate }) {
               width: 36,
               height: 36,
               borderRadius: 18,
-              overflow: 'hidden',
               backgroundColor: isActive ? colors.ownerAccentBg : 'transparent',
               marginBottom: 2,
             }}>
@@ -124,6 +136,11 @@ export default function LandlordBottomNav({ user, activeScreen, onNavigate }) {
                 size={21}
                 color={isActive ? colors.ownerAccent : colors.navInactive}
               />
+              {badgeCount > 0 && (
+                <View style={{ position: 'absolute', top: -4, right: -5, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9, backgroundColor: colors.dangerText, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.navBg }}>
+                  <Text style={{ color: '#fff', fontSize: 10, lineHeight: 12, fontWeight: '800' }}>{badgeCount > 99 ? '99+' : badgeCount}</Text>
+                </View>
+              )}
             </View>
             <Text style={{
               fontSize: 10,

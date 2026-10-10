@@ -1,5 +1,6 @@
+import ScreenSkeleton from '../../components/ScreenSkeleton';
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Modal, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { 
   isMobile, 
@@ -13,7 +14,7 @@ import {
   safeAreaTop 
 } from '../../utils/responsive';
 import { useTheme } from '../../utils/ThemeContext';
-import { getRentBilling, getUtilityBills } from '../../services/dataService';
+import { getRentBilling, getUtilityBills, updateUtilityBill } from '../../services/dataService';
 
 export default function BillingScreen() {
   const { colors } = useTheme();
@@ -22,6 +23,11 @@ export default function BillingScreen() {
   const [utilityBills, setUtilityBills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [editingBill, setEditingBill] = useState(null);
+  const [editValues, setEditValues] = useState({ monthlyRent: '', electricity: '', water: '' });
+  const [additionalCharges, setAdditionalCharges] = useState([]);
+  const [editError, setEditError] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const padding = getResponsivePadding();
   const containerMaxWidth = isDesktop ? 1400 : '100%';
@@ -58,20 +64,42 @@ export default function BillingScreen() {
   }, []);
 
   const totalCollected = rentBilling
-    .filter((item) => item.status === 'paid')
-    .reduce((sum, item) => sum + (item.amount || 0), 0);
+    .reduce((sum, item) => sum + Math.max(0, (item.totalAmount ?? item.amount ?? 0) - (item.balance ?? 0)), 0);
 
   const totalOutstanding = rentBilling
-    .filter((item) => item.status !== 'paid')
-    .reduce((sum, item) => sum + (item.amount || 0), 0);
+    .reduce((sum, item) => sum + (item.balance ?? (item.status === 'paid' ? 0 : item.totalAmount ?? item.amount ?? 0)), 0);
 
-  if (loading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
-        <ActivityIndicator size="large" color={colors.accent} />
-      </View>
-    );
-  }
+  const openBillEditor = (bill) => {
+    setEditingBill(bill);
+    setEditValues({ monthlyRent: String(bill.rent), electricity: String(bill.electricity), water: String(bill.water) });
+    setAdditionalCharges((bill.additionalCharges || []).map((charge, index) => ({ id: charge.id || `charge-${index}`, label: charge.label || charge.name || '', amount: String(charge.amount ?? '') })));
+    setEditError('');
+  };
+
+  const saveBillEdit = async () => {
+    if (!editingBill) return;
+    try {
+      setSavingEdit(true);
+      setEditError('');
+      await updateUtilityBill({
+        invoiceId: editingBill.invoiceId,
+        leaseId: editingBill.leaseId,
+        billingPeriod: editingBill.billingPeriod,
+        additionalCharges,
+        ...editValues,
+      });
+      const [rentData, utilityData] = await Promise.all([getRentBilling(), getUtilityBills()]);
+      setRentBilling(rentData);
+      setUtilityBills(utilityData);
+      setEditingBill(null);
+    } catch (saveError) {
+      setEditError(saveError.message || 'Could not save this bill. Please try again.');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  if (loading) return <ScreenSkeleton />;
 
   if (error) {
     return (
@@ -272,7 +300,7 @@ export default function BillingScreen() {
               </View>
             ) : (
               rentBilling.map((item) => (
-                <TouchableOpacity 
+                <TouchableOpacity
                   key={item.id} 
                   activeOpacity={0.7}
                   style={{ 
@@ -350,9 +378,8 @@ export default function BillingScreen() {
               </View>
             ) : (
               utilityBills.map((item) => (
-                <TouchableOpacity 
+                <View
                   key={item.id} 
-                  activeOpacity={0.7}
                   style={{ 
                     ...cardStyle,
                     backgroundColor: colors.card,
@@ -385,14 +412,33 @@ export default function BillingScreen() {
                           {item.name}
                         </Text>
                         <Text style={{ fontSize: fs(12), fontWeight: '500', color: colors.textMuted, marginTop: 2 }}>
-                          Electricity Bill
+                          Room {item.roomNumber} · {item.billingPeriod || 'Utility billing period'}
                         </Text>
                       </View>
                     </View>
                     <View style={{ alignItems: 'flex-end' }}>
-                      <Text style={{ fontSize: fs(18), fontWeight: '800', color: colors.text }}>₱{item.amount.toLocaleString()}</Text>
-                      <Text style={{ fontSize: fs(11), fontWeight: '600', color: colors.textMuted, marginTop: 2 }}>Current charge</Text>
+                      <Text style={{ fontSize: fs(18), fontWeight: '800', color: colors.text }}>₱{Number(item.total).toLocaleString()}</Text>
+                      <Text style={{ fontSize: fs(11), fontWeight: '600', color: colors.textMuted, marginTop: 2 }}>Total bill</Text>
                     </View>
+                  </View>
+
+                  <View style={{ borderTopWidth: 1, borderTopColor: colors.cardBorder, paddingTop: spacing.sm, gap: 7, marginBottom: spacing.md }}>
+                    {[
+                      ['Rent', item.rent],
+                      ['Electricity', item.electricity],
+                      ['Water', item.water],
+                    ].map(([label, amount]) => (
+                      <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={{ fontSize: fs(13), color: colors.textSecondary }}>{label}</Text>
+                        <Text style={{ fontSize: fs(13), fontWeight: '700', color: colors.text }}>₱{Number(amount || 0).toLocaleString()}</Text>
+                      </View>
+                    ))}
+                    {(item.additionalCharges || []).map((charge, index) => (
+                      <View key={charge.id || `${charge.label}-${index}`} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={{ fontSize: fs(13), color: colors.textSecondary }}>{charge.label || 'Additional charge'}</Text>
+                        <Text style={{ fontSize: fs(13), fontWeight: '700', color: colors.text }}>₱{Number(charge.amount || 0).toLocaleString()}</Text>
+                      </View>
+                    ))}
                   </View>
 
                   {/* kWh Stats Row */}
@@ -446,12 +492,109 @@ export default function BillingScreen() {
                       </View>
                     </View>
                   </View>
-                </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => openBillEditor(item)}
+                    style={{ alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.md, paddingHorizontal: 13, paddingVertical: 9, borderRadius: 9, backgroundColor: colors.accentBg }}
+                  >
+                    <Ionicons name="create-outline" size={16} color={colors.accent} />
+                    <Text style={{ fontSize: fs(12), fontWeight: '800', color: colors.accent }}>{item.invoiceId ? 'Edit bill' : 'Create bill'}</Text>
+                  </TouchableOpacity>
+                </View>
               ))
             )
           )}
         </View>
       </ScrollView>
+
+      <Modal visible={!!editingBill} transparent animationType="fade" onRequestClose={() => !savingEdit && setEditingBill(null)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '100%', maxWidth: 460, backgroundColor: colors.card, borderRadius: 18, borderWidth: 1, borderColor: colors.cardBorder, padding: 22 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <Text style={{ fontSize: fs(19), fontWeight: '800', color: colors.text }}>Edit Utility Bill</Text>
+              <TouchableOpacity onPress={() => !savingEdit && setEditingBill(null)} disabled={savingEdit} accessibilityLabel="Close edit bill" style={{ padding: 4 }}>
+                <Ionicons name="close" size={23} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <Text style={{ fontSize: fs(13), color: colors.textSecondary, marginBottom: 18 }}>
+              {editingBill ? `Room ${editingBill.roomNumber} · ${editingBill.name} · ${editingBill.billingPeriod || 'Current period'}` : ''}
+            </Text>
+
+            {[
+              ['monthlyRent', 'Rent'],
+              ['electricity', 'Electricity'],
+              ['water', 'Water'],
+            ].map(([field, label]) => (
+              <View key={field} style={{ marginBottom: 13 }}>
+                <Text style={{ fontSize: fs(13), fontWeight: '700', color: colors.text, marginBottom: 6 }}>{label} amount (₱)</Text>
+                <TextInput
+                  value={editValues[field]}
+                  onChangeText={(value) => setEditValues((current) => ({ ...current, [field]: value }))}
+                  keyboardType="decimal-pad"
+                  placeholder="0"
+                  placeholderTextColor={colors.textMuted}
+                  editable={!savingEdit}
+                  style={{ backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, color: colors.text, fontSize: fs(15) }}
+                />
+              </View>
+            ))}
+
+            <View style={{ marginBottom: 14 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text style={{ fontSize: fs(13), fontWeight: '800', color: colors.text }}>Additional charges</Text>
+                <TouchableOpacity
+                  onPress={() => setAdditionalCharges((current) => [...current, { id: `charge-${Date.now()}-${current.length}`, label: '', amount: '' }])}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8, backgroundColor: colors.accentBg }}
+                >
+                  <Ionicons name="add" size={16} color={colors.accent} />
+                  <Text style={{ color: colors.accent, fontSize: fs(12), fontWeight: '800' }}>Add charge</Text>
+                </TouchableOpacity>
+              </View>
+              {additionalCharges.map((charge) => (
+                <View key={charge.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <TextInput
+                    value={charge.label}
+                    onChangeText={(value) => setAdditionalCharges((current) => current.map((item) => item.id === charge.id ? { ...item, label: value } : item))}
+                    placeholder="Wi-Fi (₱100 per person)"
+                    placeholderTextColor={colors.textMuted}
+                    editable={!savingEdit}
+                    style={{ flex: 1, minWidth: 0, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 10, color: colors.text, fontSize: fs(13) }}
+                  />
+                  <TextInput
+                    value={charge.amount}
+                    onChangeText={(value) => setAdditionalCharges((current) => current.map((item) => item.id === charge.id ? { ...item, amount: value } : item))}
+                    keyboardType="decimal-pad"
+                    placeholder="Amount"
+                    placeholderTextColor={colors.textMuted}
+                    editable={!savingEdit}
+                    style={{ width: 94, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 10, color: colors.text, fontSize: fs(13) }}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setAdditionalCharges((current) => current.filter((item) => item.id !== charge.id))}
+                    disabled={savingEdit}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${charge.label || 'additional charge'}`}
+                    style={{ width: 36, height: 40, alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <Ionicons name="trash-outline" size={18} color={colors.dangerText} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+
+            {!!editError && <Text style={{ color: colors.dangerText, fontSize: fs(13), marginBottom: 12 }}>{editError}</Text>}
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+              <TouchableOpacity onPress={() => setEditingBill(null)} disabled={savingEdit} style={{ flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: colors.bg }}>
+                <Text style={{ fontSize: fs(14), fontWeight: '700', color: colors.text }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={saveBillEdit} disabled={savingEdit} style={{ flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: colors.accent, opacity: savingEdit ? 0.6 : 1 }}>
+                <Text style={{ fontSize: fs(14), fontWeight: '800', color: '#fff' }}>{savingEdit ? 'Saving…' : 'Save bill'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
+

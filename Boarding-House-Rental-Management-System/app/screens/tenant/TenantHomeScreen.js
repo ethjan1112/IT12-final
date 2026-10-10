@@ -109,9 +109,44 @@ export default function TenantHomeScreen({ user, onNavigateToUpdates }) {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
-        <ActivityIndicator size="large" color={colors.accent} />
-      </View>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: colors.bg }}
+        contentContainerStyle={{ paddingBottom: 24, alignItems: isDesktop ? 'center' : 'stretch' }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={{ maxWidth: containerMaxWidth, width: '100%' }}>
+          <View style={{ padding, paddingTop: isMobile ? 16 : isDesktop ? 28 : 24, paddingBottom: 20 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+              <View style={{ width: 54, height: 54, borderRadius: 18, backgroundColor: colors.cardBorder }} />
+              <View style={{ flex: 1, gap: 8 }}>
+                <View style={{ width: 100, height: 10, borderRadius: 5, backgroundColor: colors.cardBorder }} />
+                <View style={{ width: '68%', height: 20, borderRadius: 7, backgroundColor: colors.cardBorder }} />
+                <View style={{ width: '42%', height: 12, borderRadius: 6, backgroundColor: colors.cardBorder }} />
+              </View>
+            </View>
+            <View style={{ width: '76%', height: 12, borderRadius: 6, backgroundColor: colors.cardBorder, marginTop: 16 }} />
+          </View>
+
+          <View style={{ ...cardStyle, backgroundColor: colors.card, borderColor: colors.cardBorder, padding: 18, marginHorizontal: 16, marginBottom: 18 }}>
+            <View style={{ width: '58%', height: 16, borderRadius: 8, backgroundColor: colors.cardBorder, marginBottom: 14 }} />
+            <View style={{ width: '88%', height: 12, borderRadius: 6, backgroundColor: colors.cardBorder, marginBottom: 8 }} />
+            <View style={{ width: '70%', height: 12, borderRadius: 6, backgroundColor: colors.cardBorder, marginBottom: 18 }} />
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              {[0, 1].map((item) => (
+                <View key={item} style={{ flex: 1, height: 84, borderRadius: 12, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder }} />
+              ))}
+            </View>
+            <View style={{ width: '90%', height: 12, borderRadius: 6, backgroundColor: colors.cardBorder, marginTop: 16 }} />
+            <View style={{ height: 42, borderRadius: 11, backgroundColor: colors.cardBorder, marginTop: 14 }} />
+          </View>
+
+          <View style={{ paddingHorizontal: padding, gap: spacing.md }}>
+            <View style={{ height: 210, borderRadius: 26, backgroundColor: colors.cardBorder }} />
+            <View style={{ height: 130, borderRadius: 18, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder }} />
+            <View style={{ height: 100, borderRadius: 18, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder }} />
+          </View>
+        </View>
+      </ScrollView>
     );
   }
 
@@ -381,6 +416,20 @@ export default function TenantHomeScreen({ user, onNavigateToUpdates }) {
                     {billing.water}
                   </Text>
                 </View>
+
+                {(billing.additionalCharges || []).map((charge, index) => (
+                  <View key={charge.id || `${charge.label}-${index}`} style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    paddingVertical: 14,
+                    borderTopWidth: 1,
+                    borderTopColor: colors.divider,
+                  }}>
+                    <Text style={{ fontSize: fs(14), color: colors.textSecondary, fontWeight: '600' }}>{charge.label || 'Additional charge'}</Text>
+                    <Text style={{ fontSize: fs(15), color: colors.text, fontWeight: '700' }}>₱{Number(charge.amount || 0).toLocaleString()}</Text>
+                  </View>
+                ))}
 
                 <View style={{
                   flexDirection: 'row',

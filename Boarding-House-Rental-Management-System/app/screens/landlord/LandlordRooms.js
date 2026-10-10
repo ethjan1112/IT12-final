@@ -1,3 +1,4 @@
+import ScreenSkeleton from '../../components/ScreenSkeleton';
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -199,7 +200,7 @@ export default function RoomsScreen() {
     return { label: 'VACANT', bg: colors.infoBg, fg: colors.infoText };
   };
 
-  if (loading) return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}><ActivityIndicator size="large" color={colors.accent} /></View>;
+  if (loading) return <ScreenSkeleton />;
   if (error) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg, padding: 24 }}>
@@ -587,3 +588,4 @@ export default function RoomsScreen() {
     </View>
   );
 }
+

@@ -1,6 +1,7 @@
+import ScreenSkeleton from './components/ScreenSkeleton';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, BackHandler, Platform, View } from 'react-native';
-import { ThemeProvider, useTheme } from './utils/ThemeContext';
+import { BackHandler, Platform } from 'react-native';
+import { ThemeProvider } from './utils/ThemeContext';
 import LoginScreen from './screens/auth/LoginScreen';
 import LandlordApp from './LandlordApp';
 import TenantApp from './TenantApp';
@@ -9,8 +10,6 @@ import { logout, subscribeToCurrentUser } from './services/authService';
 function AppRouter() {
   const [currentUser, setCurrentUser] = useState(null); // null = unauthenticated
   const [checkingAuth, setCheckingAuth] = useState(true);
-  const { colors } = useTheme();
-
   useEffect(() => {
     let isMounted = true;
     let unsubscribeAuth = null;
@@ -56,13 +55,7 @@ function AppRouter() {
     setCurrentUser(null);
   };
 
-  if (checkingAuth) {
-    return (
-      <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" color={colors.accent} />
-      </View>
-    );
-  }
+  if (checkingAuth) return <ScreenSkeleton />;
 
   if (!currentUser) {
     return <LoginScreen onLoginSuccess={setCurrentUser} />;
@@ -87,3 +80,4 @@ export default function App() {
     </ThemeProvider>
   );
 }
+

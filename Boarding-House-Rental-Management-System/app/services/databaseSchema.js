@@ -77,7 +77,7 @@ export const COLLECTIONS = {
  *    - PK: invoice_id
  *    - FK: lease_id -> LEASES.lease_id
  *    - Fields: billing_period ('2026-09'), invoice_type ('initial'|'monthly'|'final'),
- *      rent_charge, utility_charge, security_deposit, other_charges, 
+ *      rent_charge, utility_charge, water_charge, security_deposit, other_charges, additional_charges,
  *      total_amount, due_date, status ('paid'|'unpaid'|'partial'), created_at, notes
  *    - Tenant is determined through lease_id -> LEASES.tenant_id; do not duplicate tenant_id here.
  * 

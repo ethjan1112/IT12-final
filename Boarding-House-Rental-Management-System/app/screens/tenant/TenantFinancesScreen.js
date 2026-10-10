@@ -1,3 +1,4 @@
+import ScreenSkeleton from '../../components/ScreenSkeleton';
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -76,14 +77,7 @@ export default function TenantFinancesScreen({ user }) {
     }
   };
 
-  if (loading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
-        <ActivityIndicator size="large" color={colors.accent} />
-        <Text style={{ fontSize: fs(15), color: colors.textSecondary, marginTop: 12 }}>Loading your finances...</Text>
-      </View>
-    );
-  }
+  if (loading) return <ScreenSkeleton />;
 
   if (error || !tenantInfo) {
     return (
@@ -244,8 +238,15 @@ export default function TenantFinancesScreen({ user }) {
 
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                 <Text style={{ fontSize: fs(14), color: colors.textSecondary }}>Water</Text>
-                <Text style={{ fontSize: fs(14), fontWeight: '600', color: colors.text }}>{billingBreakdown.water}</Text>
+                <Text style={{ fontSize: fs(14), fontWeight: '600', color: colors.text }}>₱{Number(billingBreakdown.water || 0).toLocaleString()}</Text>
               </View>
+
+              {(billingBreakdown.additionalCharges || []).map((charge, index) => (
+                <View key={charge.id || `${charge.label}-${index}`} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ flex: 1, fontSize: fs(14), color: colors.textSecondary }}>{charge.label || 'Additional charge'}</Text>
+                  <Text style={{ fontSize: fs(14), fontWeight: '600', color: colors.text }}>₱{Number(charge.amount || 0).toLocaleString()}</Text>
+                </View>
+              ))}
 
               <View style={{ height: 1, backgroundColor: colors.cardBorder, marginVertical: 4 }} />
 
@@ -421,3 +422,4 @@ export default function TenantFinancesScreen({ user }) {
     </View>
   );
 }
+

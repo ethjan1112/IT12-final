@@ -5,6 +5,7 @@ import { useTheme } from '../../utils/ThemeContext';
 import { isMobile, fs } from '../../utils/responsive';
 import { getVacantRoomsForAssignment, approveTenant } from '../../services/dataService';
 
+
 export default function TenantApprovalModal({ visible, tenant, onClose, onSuccess }) {
   const { colors } = useTheme();
 
@@ -13,6 +14,12 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
   const [selectedRoomId, setSelectedRoomId] = useState('');
   const [monthlyRent, setMonthlyRent] = useState('');
   const [dueDay, setDueDay] = useState('5');
+  const [dueDate, setDueDate] = useState(() => {
+    const date = new Date();
+    date.setMonth(date.getMonth() + 1);
+    date.setDate(5);
+    return date.toISOString().slice(0, 10);
+  });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -54,7 +61,7 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
   const calculateInitialPayment = () => {
     const rent = parseFloat(monthlyRent);
     if (isNaN(rent) || rent <= 0) return 0;
-    return rent * 2; // 1 month advance + 1 month security deposit
+    return rent; // 1 month advance only
   };
 
   const commitApproval = async (rent, day) => {
@@ -65,6 +72,7 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
         roomId: selectedRoomId,
         monthlyRent: rent,
         dueDay: day,
+        dueDate,
       });
 
       if (Platform.OS === 'web') {
@@ -306,19 +314,21 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
               }}
             />
 
-            {/* Due Day */}
+            {/* Initial invoice due date */}
             <Text style={{ fontSize: fs(14), fontWeight: '700', color: colors.text, marginBottom: 8 }}>
-              Due Day (1-31) <Text style={{ color: colors.dangerText }}>*</Text>
+              Initial Payment Due Date <Text style={{ color: colors.dangerText }}>*</Text>
             </Text>
             <TextInput
-              value={dueDay}
-              onChangeText={(v) => {
-                setDueDay(v);
+              value={dueDate}
+              onChangeText={(value) => {
+                setDueDate(value);
+                setDueDay(String(new Date(`${value}T00:00:00`).getDate()));
                 setError('');
               }}
-              placeholder="5"
+              placeholder="YYYY-MM-DD"
+              {...(Platform.OS === 'web' ? { type: 'date' } : {})}
               placeholderTextColor={colors.textMuted}
-              keyboardType="numeric"
+              keyboardType="default"
               editable={!submitting}
               style={{
                 backgroundColor: colors.bg,
@@ -353,12 +363,6 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
                       ₱{parseFloat(monthlyRent).toLocaleString()}
                     </Text>
                   </View>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={{ fontSize: fs(14), color: colors.text }}>Security Deposit</Text>
-                    <Text style={{ fontSize: fs(14), fontWeight: '600', color: colors.text }}>
-                      ₱{parseFloat(monthlyRent).toLocaleString()}
-                    </Text>
-                  </View>
                   <View
                     style={{
                       height: 1,
@@ -367,7 +371,7 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
                     }}
                   />
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={{ fontSize: fs(16), fontWeight: '700', color: colors.text }}>Total Due</Text>
+                    <Text style={{ fontSize: fs(16), fontWeight: '700', color: colors.text }}>Total Due (1 month advance)</Text>
                     <Text style={{ fontSize: fs(16), fontWeight: '700', color: colors.successText }}>
                       ₱{calculateInitialPayment().toLocaleString()}
                     </Text>
@@ -416,3 +420,4 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
     </Modal>
   );
 }
+

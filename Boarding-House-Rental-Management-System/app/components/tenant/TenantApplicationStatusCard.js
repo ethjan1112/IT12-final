@@ -234,7 +234,14 @@ export default function TenantApplicationStatusCard({ tenant, tenantId, refreshK
               Select a vacant room, then submit your receipt for one month advance plus one month security deposit. Staff will confirm your room and payment. This request does not reserve the room.
             </Text>
             {loadingRooms ? (
-              <View style={{ padding: 28, alignItems: 'center' }}><ActivityIndicator size="large" color={colors.accent} /></View>
+              <View style={{ paddingVertical: 8, gap: 10 }}>
+                {[0, 1, 2].map((item) => (
+                  <View key={item} style={{ height: 62, borderRadius: 11, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder, padding: 13, justifyContent: 'center', gap: 8 }}>
+                    <View style={{ width: '36%', height: 11, borderRadius: 6, backgroundColor: colors.cardBorder }} />
+                    <View style={{ width: '68%', height: 9, borderRadius: 5, backgroundColor: colors.cardBorder }} />
+                  </View>
+                ))}
+              </View>
             ) : (
               <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled">
                 {selectedRoom && (

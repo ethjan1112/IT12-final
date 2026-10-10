@@ -276,6 +276,7 @@ export default function LoginScreen({ onLoginSuccess }) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
 
   const [recoveryVisible, setRecoveryVisible] = useState(false);
   const [recoveryEmail, setRecoveryEmail] = useState('');
@@ -354,6 +355,10 @@ export default function LoginScreen({ onLoginSuccess }) {
   };
 
   const handleRegister = async () => {
+    if (!privacyAccepted) {
+      setMessage({ type: 'error', text: 'Access denied. You must agree to the Data Privacy Notice before creating an account.' });
+      return;
+    }
     if (!name.trim() || !email.trim() || !password || !confirmPassword) {
       setMessage({ type: 'error', text: 'Complete your name, email, and password fields.' });
       return;
@@ -484,7 +489,7 @@ export default function LoginScreen({ onLoginSuccess }) {
           }]}>
             <AuthModeSelector
               value={formMode}
-              onChange={(mode) => { setFormMode(mode); setMessage(null); }}
+              onChange={(mode) => { setFormMode(mode); setMessage(null); setPrivacyAccepted(false); }}
               palette={palette}
             />
 
@@ -566,9 +571,20 @@ export default function LoginScreen({ onLoginSuccess }) {
                   onSubmitEditing={handleRegister}
                 />
 
-                <AuthNotice type="info" palette={palette} style={styles.registerNotice}>
-                  Tenant sign-up is for residents. If you need an invitation, ask your property manager.
-                </AuthNotice>
+                <TouchableOpacity
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: privacyAccepted }}
+                  onPress={() => { setPrivacyAccepted((accepted) => !accepted); setMessage(null); }}
+                  activeOpacity={0.8}
+                  style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 2, marginBottom: 16, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: privacyAccepted ? palette.accent : palette.border, backgroundColor: privacyAccepted ? palette.accentSoft : palette.input }}
+                >
+                  <View style={[styles.checkbox, { borderColor: privacyAccepted ? palette.accent : palette.muted, backgroundColor: privacyAccepted ? palette.accent : 'transparent', marginTop: 1 }]}>
+                    {privacyAccepted && <Ionicons name="checkmark" size={14} color="#fff" />}
+                  </View>
+                  <Text style={{ flex: 1, color: palette.textSecondary, fontSize: 12, lineHeight: 18 }}>
+                    I have read and agree to the Data Privacy Notice.
+                  </Text>
+                </TouchableOpacity>
 
                 <AuthPrimaryButton
                   label="Create account"
