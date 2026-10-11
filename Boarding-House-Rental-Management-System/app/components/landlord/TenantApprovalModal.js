@@ -5,7 +5,6 @@ import { useTheme } from '../../utils/ThemeContext';
 import { isMobile, fs } from '../../utils/responsive';
 import { getVacantRoomsForAssignment, approveTenant } from '../../services/dataService';
 
-
 export default function TenantApprovalModal({ visible, tenant, onClose, onSuccess }) {
   const { colors } = useTheme();
 
