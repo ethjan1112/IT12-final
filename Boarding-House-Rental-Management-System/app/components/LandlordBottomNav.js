@@ -4,12 +4,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { isDesktop, fs } from '../utils/responsive';
 import { useTheme } from '../utils/ThemeContext';
 
-export default function LandlordBottomNav({ user, activeScreen, onNavigate, pendingTenantSignupCount = 0, pendingApprovalsCount = 0 }) {
+export default function LandlordBottomNav({ user, activeScreen, onNavigate, pendingApprovalsCount = 0 }) {
   const { colors } = useTheme();
-  const getBadgeCount = (item) => item.id === 'approvals'
-    ? pendingApprovalsCount
-    : item.id === 'tenants' ? pendingTenantSignupCount : 0;
-  const getBadgeDescription = (item) => item.id === 'approvals' ? 'pending approvals' : 'new sign-ups';
+  const getBadgeCount = (item) => item.id === 'approvals' ? pendingApprovalsCount : 0;
+  const getBadgeDescription = () => 'pending approvals';
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'home', iconOutline: 'home-outline' },

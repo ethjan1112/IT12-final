@@ -217,7 +217,29 @@ export async function subscribeToCurrentUser(onUser, onError) {
         onUser(null);
         return;
       }
-      const session = await getUserSessionFromFirebaseUser(fbUser);
+
+      // Auth notifies listeners as soon as account creation succeeds, before
+      // registerUser has necessarily committed the matching Firestore profile.
+      // Give that atomic signup write a short window to finish before treating
+      // an absent profile as an incomplete account and signing the user out.
+      let session;
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          session = await getUserSessionFromFirebaseUser(fbUser);
+          break;
+        } catch (error) {
+          const signupProfilePending = error?.code === 'app/profile-missing'
+            && attempt < 9
+            && auth.currentUser?.uid === fbUser.uid;
+          if (!signupProfilePending) throw error;
+
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          if (auth.currentUser?.uid !== fbUser.uid) {
+            onUser(null);
+            return;
+          }
+        }
+      }
       onUser(session);
     } catch (error) {
       console.warn('Could not restore Firebase session:', error.message);

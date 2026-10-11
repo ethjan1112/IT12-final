@@ -16,7 +16,7 @@ import {
 import { useTheme } from '../../utils/ThemeContext';
 import { getRentBilling, getUtilityBills, updateUtilityBill } from '../../services/dataService';
 
-export default function BillingScreen() {
+export default function BillingScreen({ navigation }) {
   const { colors } = useTheme();
   const [activeTab, setActiveTab] = useState('rent');
   const [rentBilling, setRentBilling] = useState([]);
@@ -204,6 +204,32 @@ export default function BillingScreen() {
               </View>
             </View>
           </View>
+
+          <TouchableOpacity
+            activeOpacity={0.75}
+            onPress={() => navigation?.navigate('payment-proofs')}
+            accessibilityRole="button"
+            accessibilityLabel="Review tenant payment proofs"
+            style={{
+              ...cardStyle,
+              backgroundColor: colors.card,
+              borderColor: colors.cardBorder,
+              padding: 16,
+              marginTop: spacing.md,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 12,
+            }}
+          >
+            <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: colors.accentBg, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="receipt-outline" size={20} color={colors.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: fs(14), fontWeight: '700', color: colors.text }}>Payment Verification</Text>
+              <Text style={{ fontSize: fs(12), color: colors.textMuted, marginTop: 3 }}>Review tenant payment proofs</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+          </TouchableOpacity>
 
           {/* Toggle Tabs */}
           <View style={{ 

@@ -29,7 +29,7 @@ export default function LandlordApp({ user, onLogout }) {
   const [menuVisible, setMenuVisible] = useState(false);
   const [slideAnim] = useState(new Animated.Value(-280));
   const [navigationParams, setNavigationParams] = useState(null);
-  const [pendingTenantSignupCount, setPendingTenantSignupCount] = useState(0);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const { isDark, toggleTheme, colors } = useTheme();
 
   useEffect(() => {
@@ -37,7 +37,7 @@ export default function LandlordApp({ user, onLogout }) {
     const refreshSignupCount = async () => {
       try {
         const count = await getPendingTenantRegistrationCount();
-        if (isMounted) setPendingTenantSignupCount(count);
+        if (isMounted) setPendingApprovalsCount(count);
       } catch (error) {
         console.warn('Could not refresh tenant sign-up badge:', error.message || error);
       }
@@ -107,11 +107,11 @@ export default function LandlordApp({ user, onLogout }) {
       case 'dashboard':
         return <LandlordDashboard />;
       case 'tenants':
-        return <LandlordTenants onPendingSignupsChange={setPendingTenantSignupCount} />;
+        return <LandlordTenants />;
       case 'rooms':
         return <LandlordRooms />;
       case 'billing':
-        return <BillingScreen />;
+        return <BillingScreen navigation={navigation} />;
       case 'issues':
         return <IssuesScreen />;
       case 'announcements':
@@ -156,7 +156,6 @@ export default function LandlordApp({ user, onLogout }) {
   };
 
   const menuItems = [
-    { id: 'payment-proofs', label: 'Payment Verification', icon: 'checkmark-done', iconOutline: 'checkmark-done-outline' },
     { id: 'billing', label: 'Billing', icon: 'card', iconOutline: 'card-outline' },
     { id: 'issues', label: 'Issues', icon: 'alert-circle', iconOutline: 'alert-circle-outline' },
     { id: 'announcements', label: 'Announcements', icon: 'megaphone', iconOutline: 'megaphone-outline' },
@@ -178,13 +177,13 @@ export default function LandlordApp({ user, onLogout }) {
 
       {isDesktop ? (
         <View style={{ flex: 1, flexDirection: 'row' }}>
-          <LandlordBottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} user={user} pendingTenantSignupCount={pendingTenantSignupCount} pendingApprovalsCount={pendingTenantSignupCount} />
+          <LandlordBottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} user={user} pendingApprovalsCount={pendingApprovalsCount} />
           <View style={{ flex: 1 }}>{renderScreen()}</View>
         </View>
       ) : (
         <>
           <View style={{ flex: 1 }}>{renderScreen()}</View>
-          <LandlordBottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} user={user} pendingTenantSignupCount={pendingTenantSignupCount} pendingApprovalsCount={pendingTenantSignupCount} />
+          <LandlordBottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} user={user} pendingApprovalsCount={pendingApprovalsCount} />
         </>
       )}
 
