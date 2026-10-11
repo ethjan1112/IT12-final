@@ -1,0 +1,29 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const keyFor = (uid) => `announcements_last_seen_${uid || 'tenant'}`;
+
+export const getAnnouncementTime = (announcement) => {
+  const idTime = Number(String(announcement.announcement_id || announcement.id || '').match(/\d{10,}/)?.[0]);
+  if (Number.isFinite(idTime)) return idTime;
+  const parsed = Date.parse(announcement.date || announcement.created_at || '');
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+export async function getLastSeen(uid) {
+  try {
+    const value = await AsyncStorage.getItem(keyFor(uid));
+    return value ? Number(value) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export async function markAnnouncementsSeen(uid, announcements = []) {
+  const latest = Math.max(0, ...announcements.map(getAnnouncementTime));
+  if (!latest) return;
+  try {
+    await AsyncStorage.setItem(keyFor(uid), String(latest));
+  } catch {
+    // Ignore storage errors; the badge just shows again next time.
+  }
+}

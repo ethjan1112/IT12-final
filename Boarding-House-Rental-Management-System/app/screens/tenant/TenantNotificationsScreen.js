@@ -4,7 +4,14 @@ import { View, Text, ScrollView, TouchableOpacity, RefreshControl, ActivityIndic
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../utils/ThemeContext';
 import { isMobile, getResponsivePadding, fs, spacing, cardStyle, safeAreaTop } from '../../utils/responsive';
-import { getTenantNotifications, markNotificationAsRead } from '../../services/dataService';
+import { getTenantNotifications, markNotificationAsRead, getAnnouncements } from '../../services/dataService';
+import AnnouncementDetailsModal from '../../components/AnnouncementDetailsModal';
+import { getLastSeen, markAnnouncementsSeen, getAnnouncementTime } from '../../utils/announcementSeen';
+
+const timeOf = (item) => {
+  const parsed = Date.parse(item.created_at);
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
 
 export default function TenantNotificationsScreen({ user }) {
   const { colors } = useTheme();
@@ -14,13 +21,33 @@ export default function TenantNotificationsScreen({ user }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [notifications, setNotifications] = useState([]);
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
 
   const loadNotifications = async () => {
     try {
       setError(null);
       const tenantId = user?.tenant_id || user?.room || '2';
-      const data = await getTenantNotifications(tenantId);
-      setNotifications(data);
+      const uid = user?.uid || user?.tenant_id;
+      const [data, announcements, lastSeen] = await Promise.all([
+        getTenantNotifications(tenantId),
+        getAnnouncements().catch(() => []),
+        getLastSeen(uid),
+      ]);
+      const announcementItems = (announcements || []).map((announcement) => {
+        const time = getAnnouncementTime(announcement);
+        return {
+          id: `announcement-${announcement.announcement_id || announcement.id}`,
+          type: 'announcement',
+          category: announcement.category,
+          title: announcement.title,
+          message: announcement.description,
+          created_at: new Date(time).toISOString(),
+          read: time <= lastSeen,
+          announcement,
+        };
+      });
+      setNotifications([...(data || []), ...announcementItems].sort((a, b) => timeOf(b) - timeOf(a)));
+      markAnnouncementsSeen(uid, announcements || []);
     } catch (err) {
       console.error('Error loading notifications:', err);
       setError('Failed to load notifications. Please try again.');
@@ -40,6 +67,10 @@ export default function TenantNotificationsScreen({ user }) {
   }, [user]);
 
   const handleNotificationPress = async (notification) => {
+    if (notification.type === 'announcement') {
+      setSelectedAnnouncement(notification.announcement);
+      return;
+    }
     try {
       if (!notification.read) {
         await markNotificationAsRead(notification.id);
@@ -52,18 +83,40 @@ export default function TenantNotificationsScreen({ user }) {
     }
   };
 
-  const getNotificationIcon = (type) => {
+  const handleMarkAllRead = async () => {
+    const unread = notifications.filter((n) => !n.read && n.type !== 'announcement');
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    await Promise.all(
+      unread.map((n) =>
+        markNotificationAsRead(n.id).catch((err) => console.error('Error marking notification as read:', err))
+      )
+    );
+  };
+
+  const getNotificationIcon = (type, category) => {
+    if (type === 'announcement') {
+      switch (category) {
+        case 'Payment':
+          return { name: 'card', color: colors.successText, bg: colors.successBg, label: 'Payment' };
+        case 'Maintenance':
+          return { name: 'construct', color: colors.infoText, bg: colors.infoBg, label: 'Maintenance' };
+        case 'House Rules':
+          return { name: 'document-text', color: colors.warningText, bg: colors.warningBg, label: 'House Rules' };
+        default:
+          return { name: 'megaphone', color: colors.accent, bg: colors.accentBg, label: 'Announcement' };
+      }
+    }
     switch (type) {
       case 'approval':
-        return { name: 'checkmark-circle', color: colors.successText, bg: colors.successBg };
+        return { name: 'checkmark-circle', color: colors.successText, bg: colors.successBg, label: 'Approved' };
       case 'rejection':
-        return { name: 'close-circle', color: colors.dangerText, bg: colors.dangerBg };
+        return { name: 'close-circle', color: colors.dangerText, bg: colors.dangerBg, label: 'Declined' };
       case 'invoice_created':
-        return { name: 'document-text', color: '#f59e0b', bg: '#fef3c7' };
+        return { name: 'document-text', color: '#f59e0b', bg: '#fef3c7', label: 'Invoice' };
       case 'payment_recorded':
-        return { name: 'cash', color: colors.successText, bg: colors.successBg };
+        return { name: 'cash', color: colors.successText, bg: colors.successBg, label: 'Payment' };
       default:
-        return { name: 'notifications', color: colors.accent, bg: colors.accentBg };
+        return { name: 'notifications', color: colors.accent, bg: colors.accentBg, label: 'Notification' };
     }
   };
 
@@ -156,6 +209,16 @@ export default function TenantNotificationsScreen({ user }) {
             )}
           </View>
           <Text style={{ fontSize: fs(15), color: colors.textSecondary, marginTop: 4 }}>Stay updated on your account</Text>
+            {unreadCount > 0 && (
+            <TouchableOpacity
+              onPress={handleMarkAllRead}
+              activeOpacity={0.7}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 12 }}
+            >
+              <Ionicons name="checkmark-done" size={16} color={colors.accent} />
+              <Text style={{ fontSize: fs(13), fontWeight: '700', color: colors.accent }}>Mark all as read</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Error Display */}
@@ -187,85 +250,106 @@ export default function TenantNotificationsScreen({ user }) {
 
                 <View style={{ gap: spacing.sm }}>
                   {groupNotifs.map((notification) => {
-                    const iconData = getNotificationIcon(notification.type);
+                    const iconData = getNotificationIcon(notification.type, notification.category);
 
                     return (
                       <TouchableOpacity
                         key={notification.id}
-                        activeOpacity={0.7}
+                        activeOpacity={0.8}
                         onPress={() => handleNotificationPress(notification)}
                         style={{
                           ...cardStyle,
                           backgroundColor: notification.read ? colors.card : colors.accentBg,
                           borderColor: notification.read ? colors.cardBorder : colors.accent,
-                          borderWidth: notification.read ? 1 : 2,
+                          borderWidth: 1,
+                          borderLeftWidth: 4,
+                          borderLeftColor: iconData.color,
+                          borderRadius: 20,
+                          overflow: 'hidden',
                           padding: 16,
                         }}
                       >
-                        <View style={{ flexDirection: 'row', gap: 12 }}>
-                          {/* Icon */}
+                        {/* Top row: icon, category tag, time */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                           <View
                             style={{
                               width: 44,
                               height: 44,
-                              borderRadius: 22,
+                              borderRadius: 14,
                               backgroundColor: iconData.bg,
                               alignItems: 'center',
                               justifyContent: 'center',
-                              flexShrink: 0,
                             }}
                           >
                             <Ionicons name={iconData.name} size={22} color={iconData.color} />
                           </View>
 
-                          {/* Content */}
                           <View style={{ flex: 1 }}>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-                              <Text
-                                style={{
-                                  fontSize: fs(15),
-                                  fontWeight: '700',
-                                  color: colors.text,
-                                  flex: 1,
-                                  marginRight: 8,
-                                }}
-                              >
-                                {notification.title}
-                              </Text>
-                              {!notification.read && (
-                                <View
-                                  style={{
-                                    width: 8,
-                                    height: 8,
-                                    borderRadius: 4,
-                                    backgroundColor: colors.accent,
-                                  }}
-                                />
-                              )}
-                            </View>
-
-                            <Text
+                            <View
                               style={{
-                                fontSize: fs(14),
-                                color: colors.textSecondary,
-                                lineHeight: 20,
-                                marginBottom: 8,
+                                alignSelf: 'flex-start',
+                                backgroundColor: iconData.bg,
+                                paddingHorizontal: 10,
+                                paddingVertical: 4,
+                                borderRadius: 8,
                               }}
                             >
-                              {notification.message}
-                            </Text>
+                              <Text
+                                style={{
+                                  fontSize: fs(11),
+                                  fontWeight: '800',
+                                  letterSpacing: 0.6,
+                                  textTransform: 'uppercase',
+                                  color: iconData.color,
+                                }}
+                              >
+                                {iconData.label}
+                              </Text>
+                            </View>
+                          </View>
 
-                            <Text style={{ fontSize: fs(12), color: colors.textMuted }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                            {!notification.read && (
+                              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent }} />
+                            )}
+                            <Ionicons name="time-outline" size={13} color={colors.textMuted} />
+                            <Text style={{ fontSize: fs(12), fontWeight: '500', color: colors.textMuted }}>
                               {formatDate(notification.created_at)}
                             </Text>
                           </View>
                         </View>
+
+                        {/* Title and message */}
+                        <Text
+                          style={{
+                            fontSize: fs(16),
+                            fontWeight: '800',
+                            color: colors.text,
+                            lineHeight: 23,
+                            marginBottom: 6,
+                          }}
+                        >
+                          {notification.title}
+                        </Text>
+
+                        <Text
+                          style={{ fontSize: fs(14), color: colors.textSecondary, lineHeight: 21 }}
+                          numberOfLines={notification.type === 'announcement' ? 3 : undefined}
+                        >
+                          {notification.message}
+                        </Text>
+                        {notification.type === 'announcement' && (notification.message || '').length > 110 && (
+                          <Text style={{ fontSize: fs(13), fontWeight: '700', color: iconData.color, marginTop: 8 }}>
+                            Read more
+                          </Text>
+                        )}
                       </TouchableOpacity>
                     );
                   })}
                 </View>
               </View>
             ))}
+            <AnnouncementDetailsModal announcement={selectedAnnouncement} onClose={() => setSelectedAnnouncement(null)} />
           </View>
         )}
       </ScrollView>
