@@ -146,7 +146,7 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
         <Pressable
           style={{
             width: isMobile ? '90%' : 520,
-            maxHeight: '85%',
+            maxHeight: '92%',
             backgroundColor: colors.card,
             borderRadius: 16,
             padding: 24,
@@ -217,7 +217,7 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
             </View>
           )}
 
-          <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+          <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
             {/* Room Selection */}
             <Text style={{ fontSize: fs(14), fontWeight: '700', color: colors.text, marginBottom: 8 }}>
               Select Room <Text style={{ color: colors.dangerText }}>*</Text>
@@ -371,7 +371,7 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
                     }}
                   />
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={{ fontSize: fs(16), fontWeight: '700', color: colors.text }}>Total Due (1 month advance)</Text>
+                    <Text style={{ flex: 1, marginRight: 8, fontSize: fs(15), fontWeight: '700', color: colors.text }}>Total Due (1 month advance)</Text>
                     <Text style={{ fontSize: fs(16), fontWeight: '700', color: colors.successText }}>
                       ₱{calculateInitialPayment().toLocaleString()}
                     </Text>
@@ -386,32 +386,42 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
             <TouchableOpacity
               onPress={onClose}
               disabled={submitting}
+              activeOpacity={0.8}
               style={{
                 flex: 1,
+                minHeight: 52,
+                paddingHorizontal: 12,
                 backgroundColor: colors.bg,
-                paddingVertical: 14,
+                borderWidth: 1,
+                borderColor: colors.cardBorder,
                 borderRadius: 12,
                 alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
-              <Text style={{ fontSize: fs(15), fontWeight: '700', color: colors.text }}>Cancel</Text>
+              <Text style={{ fontSize: fs(15), fontWeight: '700', color: colors.text, textAlign: 'center' }}>Cancel</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={handleApprove}
               disabled={submitting || vacantRooms.length === 0}
+              activeOpacity={0.8}
               style={{
-                flex: 1,
+                flex: 1.5,
+                minHeight: 52,
+                paddingHorizontal: 12,
                 backgroundColor: vacantRooms.length === 0 ? colors.textMuted : colors.accent,
-                paddingVertical: 14,
                 borderRadius: 12,
                 alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
               {submitting ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text style={{ fontSize: fs(15), fontWeight: '700', color: '#fff' }}>Approve & Create Lease</Text>
+                <Text numberOfLines={2} style={{ fontSize: fs(15), fontWeight: '700', color: '#fff', textAlign: 'center' }}>
+                  Approve & Create Lease
+                </Text>
               )}
             </TouchableOpacity>
           </View>
