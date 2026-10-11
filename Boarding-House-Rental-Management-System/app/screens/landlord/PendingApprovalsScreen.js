@@ -82,11 +82,22 @@ export default function PendingApprovalsScreen() {
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: padding, paddingTop: isMobile ? safeAreaTop + 16 : 40, paddingBottom: 100 }}
+        contentContainerStyle={{ paddingHorizontal: padding, paddingTop: isMobile ? 16 : 40, paddingBottom: 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
       >
         {/* Header */}
         <View style={{ marginBottom: spacing.lg }}>
+          <Text
+            style={{
+              fontSize: fs(12),
+              fontWeight: '700',
+              letterSpacing: 1.5,
+              color: colors.textSecondary,
+              marginBottom: 4,
+            }}
+          >
+            OWNER PORTAL
+          </Text>
           <Text style={{ fontSize: fs(32), color: colors.text, fontWeight: '700' }}>Pending Approvals</Text>
           <Text style={{ fontSize: fs(15), color: colors.textSecondary, marginTop: 4 }}>
             Review and approve tenant registrations

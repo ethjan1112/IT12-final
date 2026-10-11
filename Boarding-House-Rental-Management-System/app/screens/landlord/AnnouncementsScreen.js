@@ -139,7 +139,7 @@ export default function AnnouncementsScreen() {
       <View
         style={{
           paddingHorizontal: padding,
-          paddingTop: isMobile ? safeAreaTop + 16 : isDesktop ? 40 : 60,
+          paddingTop: isMobile ? 16 : isDesktop ? 40 : 60,
           paddingBottom: spacing.lg,
           alignItems: isDesktop ? 'center' : 'stretch',
         }}

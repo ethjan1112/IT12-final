@@ -124,11 +124,22 @@ export default function TenantNotificationsScreen({ user }) {
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: padding, paddingTop: isMobile ? safeAreaTop + 16 : 40, paddingBottom: 100 }}
+        contentContainerStyle={{ paddingHorizontal: padding, paddingTop: isMobile ? 16 : 40, paddingBottom: 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
       >
         {/* Header */}
         <View style={{ marginBottom: spacing.lg }}>
+          <Text
+            style={{
+              fontSize: fs(12),
+              fontWeight: '700',
+              letterSpacing: 1.5,
+              color: colors.textSecondary,
+              marginBottom: 4,
+            }}
+          >
+            TENANT PORTAL
+          </Text>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text style={{ fontSize: fs(28), color: colors.text, fontWeight: '700' }}>Notifications</Text>
             {unreadCount > 0 && (

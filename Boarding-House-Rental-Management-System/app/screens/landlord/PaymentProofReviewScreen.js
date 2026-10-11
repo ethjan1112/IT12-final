@@ -127,7 +127,7 @@ export default function PaymentProofReviewScreen() {
       >
         <View style={{ maxWidth: containerMaxWidth, width: '100%' }}>
           {/* Header */}
-          <View style={{ paddingHorizontal: padding, paddingTop: isMobile ? safeAreaTop + 16 : isDesktop ? 40 : 60, paddingBottom: spacing.md }}>
+          <View style={{ paddingHorizontal: padding, paddingTop: isMobile ? 16 : isDesktop ? 40 : 60, paddingBottom: spacing.md }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
               <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.accentBg, alignItems: 'center', justifyContent: 'center' }}>
                 <Ionicons name="checkmark-done-outline" size={24} color={colors.accent} />

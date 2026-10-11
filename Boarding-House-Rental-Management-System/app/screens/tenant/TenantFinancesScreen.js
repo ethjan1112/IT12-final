@@ -81,7 +81,7 @@ export default function TenantFinancesScreen({ user }) {
 
   if (error || !tenantInfo) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.bg, padding: padding, paddingTop: safeAreaTop + 40 }}>
+      <View style={{ flex: 1, backgroundColor: colors.bg, padding: padding, paddingTop: 40 }}>
         <View style={{ ...cardStyle, backgroundColor: colors.dangerBg, borderColor: colors.dangerText, padding: 24, alignItems: 'center' }}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.dangerText} />
           <Text style={{ fontSize: fs(16), fontWeight: '700', color: colors.dangerText, marginTop: 12 }}>
@@ -97,8 +97,21 @@ export default function TenantFinancesScreen({ user }) {
 
   if (tenantInfo.accountStatus !== 'approved') {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: isMobile ? safeAreaTop + 16 : 40 }}>
-        <Text style={{ fontSize: fs(28), color: colors.text, fontWeight: '700', paddingHorizontal: padding, marginBottom: 18 }}>My Finances</Text>
+      <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: isMobile ? 16 : 40 }}>
+        <View style={{ paddingHorizontal: padding, marginBottom: 18 }}>
+          <Text
+            style={{
+              fontSize: fs(12),
+              fontWeight: '700',
+              letterSpacing: 1.5,
+              color: colors.textSecondary,
+              marginBottom: 4,
+            }}
+          >
+            TENANT PORTAL
+          </Text>
+          <Text style={{ fontSize: fs(28), color: colors.text, fontWeight: '700' }}>My Finances</Text>
+        </View>
         <TenantApplicationStatusCard tenant={tenantInfo} tenantId={user?.tenant_id} onChanged={loadFinancialData} />
       </View>
     );
@@ -125,11 +138,22 @@ export default function TenantFinancesScreen({ user }) {
       
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: padding, paddingTop: isMobile ? safeAreaTop + 16 : 40, paddingBottom: 100 }}
+        contentContainerStyle={{ paddingHorizontal: padding, paddingTop: isMobile ? 16 : 40, paddingBottom: 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
       >
         {/* Header */}
         <View style={{ marginBottom: spacing.lg }}>
+          <Text
+            style={{
+              fontSize: fs(12),
+              fontWeight: '700',
+              letterSpacing: 1.5,
+              color: colors.textSecondary,
+              marginBottom: 4,
+            }}
+          >
+            TENANT PORTAL
+          </Text>
           <Text style={{ fontSize: fs(28), color: colors.text, fontWeight: '700' }}>My Finances</Text>
           <Text style={{ fontSize: fs(15), color: colors.textSecondary, marginTop: 4 }}>
             {tenantInfo.roomNumber ? `Room ${tenantInfo.roomNumber}` : 'Your financial overview'}

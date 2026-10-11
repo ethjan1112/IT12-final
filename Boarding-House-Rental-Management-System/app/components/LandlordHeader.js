@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, Platform, StatusBar } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../utils/ThemeContext';
 import { isMobile, isDesktop, fs, spacing, safeAreaTop, cardShadow } from '../utils/responsive';
@@ -24,6 +24,13 @@ export default function LandlordHeader({
 }) {
   const { colors } = useTheme();
 
+  const topInset =
+  Platform.OS === 'ios'
+    ? safeAreaTop
+    : Platform.OS === 'android'
+    ? StatusBar.currentHeight || 0
+    : 0;
+
   const headerHeight = isMobile ? 56 : 64;
   const buttonSize = 40;
   const iconSize = 22;
@@ -34,7 +41,7 @@ export default function LandlordHeader({
         backgroundColor: colors.card,
         borderBottomWidth: 1,
         borderBottomColor: colors.cardBorder,
-        paddingTop: Platform.OS === 'ios' ? safeAreaTop : 0,
+        paddingTop: topInset,
         ...Platform.select({
           ios: {
             shadowColor: '#000',
