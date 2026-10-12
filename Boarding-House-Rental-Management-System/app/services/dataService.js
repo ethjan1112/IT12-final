@@ -100,13 +100,14 @@ async function getStore() {
   if (!tenant) return Object.fromEntries(collectionNames.map((name) => [name, []]));
 
   const tenantStore = Object.fromEntries(collectionNames.map((name) => [name, []]));
-  const [boardingHouses, roomTypes, rooms, leases, complaints, announcements, extensionRequests, roomChangeRequests] = await Promise.all([
+  const [boardingHouses, roomTypes, rooms, leases, complaints, announcements, notifications, extensionRequests, roomChangeRequests] = await Promise.all([
     readCollection(COLLECTIONS.BOARDING_HOUSES),
     readCollection(COLLECTIONS.ROOM_TYPES),
     readCollection(COLLECTIONS.ROOMS),
     readWhere(COLLECTIONS.LEASES, 'tenant_id', tenant.id),
     readWhere(COLLECTIONS.COMPLAINTS, 'tenant_id', tenant.id),
     readCollection(COLLECTIONS.ANNOUNCEMENTS),
+    readWhere(COLLECTIONS.TENANT_NOTIFICATIONS, 'tenant_id', tenant.id),
     readWhere(COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS, 'tenant_id', tenant.id).catch(() => []),
     readWhere(COLLECTIONS.ROOM_CHANGE_REQUESTS, 'tenant_id', tenant.id).catch(() => []),
   ]);
@@ -123,6 +124,7 @@ async function getStore() {
   tenantStore[COLLECTIONS.PAYMENTS] = payments;
   tenantStore[COLLECTIONS.COMPLAINTS] = complaints;
   tenantStore[COLLECTIONS.ANNOUNCEMENTS] = announcements;
+  tenantStore[COLLECTIONS.TENANT_NOTIFICATIONS] = notifications;
   tenantStore[COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS] = extensionRequests;
   tenantStore[COLLECTIONS.ROOM_CHANGE_REQUESTS] = roomChangeRequests;
   return tenantStore;
@@ -886,6 +888,7 @@ export async function getTenantBillingBreakdown(id = '2') {
       const latestPayment = [...invPayments].sort((a, b) => String(b.payment_date || '').localeCompare(String(a.payment_date || '')))[0];
 
       return {
+        invoiceId: invoice.id,
         month: invoice.billing_period
           ? new Date(`${invoice.billing_period}-01T12:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
           : 'Current period',
@@ -910,10 +913,10 @@ export async function getTenantBillingBreakdown(id = '2') {
       };
     }
 
-    return { month: '', monthlyRent: 0, electricity: 0, securityDeposit: 0, invoiceType: null, water: 0, additionalCharges: [], totalDue: 0, dueDate: 'Pending room assignment', paidAmount: 0, outstanding: 0 };
+    return { invoiceId: null, month: '', monthlyRent: 0, electricity: 0, securityDeposit: 0, invoiceType: null, water: 0, additionalCharges: [], totalDue: 0, dueDate: 'Pending room assignment', paidAmount: 0, outstanding: 0 };
   } catch (error) {
     console.warn('Could not fetch billing breakdown:', error.message || error);
-    return { month: '', monthlyRent: 0, electricity: 0, securityDeposit: 0, invoiceType: null, water: 0, additionalCharges: [], totalDue: 0, dueDate: 'Pending room assignment', paidAmount: 0, outstanding: 0 };
+    return { invoiceId: null, month: '', monthlyRent: 0, electricity: 0, securityDeposit: 0, invoiceType: null, water: 0, additionalCharges: [], totalDue: 0, dueDate: 'Pending room assignment', paidAmount: 0, outstanding: 0 };
   }
 }
 
@@ -1034,6 +1037,107 @@ export async function getTenantExtensionRequests(tenantId) {
       status: request.status,
       date: request.requested_at,
     }));
+}
+
+export async function getPendingDueDateExtensionRequests() {
+  const store = await getStore();
+  const requests = store[COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS] || [];
+  const tenants = store[COLLECTIONS.TENANTS] || [];
+  const invoices = store[COLLECTIONS.INVOICES] || [];
+  const leases = store[COLLECTIONS.LEASES] || [];
+  const rooms = store[COLLECTIONS.ROOMS] || [];
+
+  return requests
+    .filter((request) => request.status === 'pending')
+    .map((request) => {
+      const tenant = tenants.find((item) => item.id === request.tenant_id);
+      const invoice = invoices.find((item) => item.id === request.invoice_id);
+      const lease = invoice && leases.find((item) => item.id === invoice.lease_id);
+      const room = lease && rooms.find((item) => item.id === lease.room_id);
+      return {
+        id: request.id,
+        tenantId: request.tenant_id,
+        tenantName: tenant ? `${tenant.first_name} ${tenant.last_name}` : 'Unknown tenant',
+        roomNumber: room?.room_number || '—',
+        invoiceId: request.invoice_id,
+        currentDueDate: request.current_due_date,
+        requestedDueDate: request.requested_due_date,
+        reason: request.reason || '',
+        requestedAt: request.requested_at,
+      };
+    })
+    .sort((first, second) => String(second.requestedAt || '').localeCompare(String(first.requestedAt || '')));
+}
+
+export async function getPendingDueDateExtensionRequestCount() {
+  const store = await getStore();
+  return (store[COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS] || [])
+    .filter((request) => request.status === 'pending').length;
+}
+
+export async function reviewDueDateExtensionRequest({ requestId, decision, reviewedBy, rejectionReason = '' }) {
+  if (!['approved', 'rejected'].includes(decision)) {
+    throw new Error('Choose whether to approve or reject this request.');
+  }
+
+  const store = await getStore();
+  const requests = store[COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS] || [];
+  const request = requests.find((item) => item.id === requestId);
+  if (!request) throw new Error('Due-date extension request not found.');
+  if (request.status !== 'pending') throw new Error('This request has already been reviewed.');
+
+  const updates = {
+    status: decision,
+    reviewed_at: new Date().toISOString(),
+    reviewed_by_user_id: reviewedBy || auth?.currentUser?.uid || null,
+  };
+  if (decision === 'rejected') updates.rejection_reason = String(rejectionReason || '').trim();
+
+  const notificationId = `notif-${Date.now()}`;
+  const notification = {
+    id: notificationId,
+    tenant_id: request.tenant_id,
+    type: decision === 'approved' ? 'due_date_extension_approved' : 'due_date_extension_rejected',
+    title: decision === 'approved' ? 'Due Date Extension Approved' : 'Due Date Extension Rejected',
+    message: decision === 'approved'
+      ? `Your due date extension request was approved. Your new payment due date is ${request.requested_due_date}.`
+      : `Your due date extension request was rejected.${updates.rejection_reason ? ` Reason: ${updates.rejection_reason}` : ''}`,
+    read: false,
+    created_at: updates.reviewed_at,
+    related_invoice_id: request.invoice_id,
+  };
+
+  if (isFirebaseConfigured && db) {
+    const { doc, writeBatch } = await getFirestoreFns();
+    if (decision === 'approved') {
+      const batch = writeBatch(db);
+      batch.update(doc(db, COLLECTIONS.INVOICES, request.invoice_id), {
+        due_date: request.requested_due_date,
+      });
+      batch.update(doc(db, COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS, requestId), updates);
+      batch.set(doc(db, COLLECTIONS.TENANT_NOTIFICATIONS, notificationId), notification);
+      await batch.commit();
+    } else {
+      const batch = writeBatch(db);
+      batch.update(doc(db, COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS, requestId), updates);
+      batch.set(doc(db, COLLECTIONS.TENANT_NOTIFICATIONS, notificationId), notification);
+      await batch.commit();
+    }
+  } else {
+    if (decision === 'approved') {
+      const invoice = (store[COLLECTIONS.INVOICES] || []).find((item) => item.id === request.invoice_id);
+      if (!invoice) throw new Error('The invoice for this request could not be found.');
+      invoice.due_date = request.requested_due_date;
+    }
+    Object.assign(request, updates);
+    const mockStore = getNormalizedMockDatabase();
+    if (!mockStore[COLLECTIONS.TENANT_NOTIFICATIONS]) {
+      mockStore[COLLECTIONS.TENANT_NOTIFICATIONS] = [];
+    }
+    mockStore[COLLECTIONS.TENANT_NOTIFICATIONS].unshift(notification);
+  }
+
+  return { ...request };
 }
 
 export async function submitDueDateExtensionRequest({ tenantId, requestedDueDate, reason = '' }) {
@@ -2357,14 +2461,6 @@ export async function submitPaymentProof({ tenantId, invoiceId, amount, paymentD
       mockStore[COLLECTIONS.PAYMENT_PROOFS].push(paymentProof);
     }
     
-    // Create notification for landlord (optional)
-    await createNotification({
-      tenantId,
-      type: 'payment_proof_submitted',
-      title: 'Payment Proof Submitted',
-      message: `Payment proof for ₱${amount.toLocaleString()} submitted and awaiting verification.`,
-    });
-    
     return paymentProof;
   } catch (error) {
     console.error('Error submitting payment proof:', error);
@@ -2465,40 +2561,31 @@ export async function approvePaymentProof(proofId, reviewerUserId) {
     const proof = proofs.find((p) => p.id === proofId);
     if (!proof) throw new Error('Payment proof not found');
     if (proof.status !== 'pending') throw new Error('Payment proof has already been reviewed');
+    if (!Number.isFinite(Number(proof.amount)) || Number(proof.amount) <= 0) {
+      throw new Error('Payment proof has an invalid amount and cannot be recorded');
+    }
     
     const now = new Date().toISOString();
-    
-    // Update proof status
+
+    await recordPayment({
+      invoiceId: proof.invoice_id,
+      amountPaid: proof.amount,
+      paymentDate: proof.payment_date,
+      paymentMethod: proof.payment_method,
+      referenceNo: proof.reference_no,
+      receivedBy: reviewerUserId,
+    });
+
     if (isFirebaseConfigured && db) {
       await updateDocument(COLLECTIONS.PAYMENT_PROOFS, proofId, {
         status: 'approved',
         reviewed_at: now,
         reviewed_by_user_id: reviewerUserId,
       });
-      
-      // Record the actual payment
-      await recordPayment({
-        invoiceId: proof.invoice_id,
-        amount: proof.amount,
-        paymentDate: proof.payment_date,
-        paymentMethod: proof.payment_method,
-        referenceNo: proof.reference_no,
-        receivedBy: reviewerUserId,
-      });
     } else {
       proof.status = 'approved';
       proof.reviewed_at = now;
       proof.reviewed_by_user_id = reviewerUserId;
-      
-      // Record the actual payment
-      await recordPayment({
-        invoiceId: proof.invoice_id,
-        amount: proof.amount,
-        paymentDate: proof.payment_date,
-        paymentMethod: proof.payment_method,
-        referenceNo: proof.reference_no,
-        receivedBy: reviewerUserId,
-      });
     }
     
     // Notify tenant

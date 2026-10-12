@@ -89,7 +89,7 @@ export default function TenantApp({ user, onLogout }) {
   const renderScreen = () => {
     switch (activeScreen) {
       case 'home':
-        return <TenantHomeScreen user={tenantUser} onNavigateToUpdates={() => setActiveScreen('updates')} />;
+        return <TenantHomeScreen user={tenantUser} onNavigateToNotifications={() => setActiveScreen('notifications')} />;
       case 'complaints':
         return <TenantComplaintsScreen user={tenantUser} />;
       case 'updates':
@@ -105,7 +105,7 @@ export default function TenantApp({ user, onLogout }) {
           onUserUpdated={(updates) => setTenantUser((current) => ({ ...current, ...updates }))}
         />;
       default:
-        return <TenantHomeScreen user={tenantUser} onNavigateToUpdates={() => setActiveScreen('updates')} />;
+        return <TenantHomeScreen user={tenantUser} onNavigateToNotifications={() => setActiveScreen('notifications')} />;
     }
   };
 

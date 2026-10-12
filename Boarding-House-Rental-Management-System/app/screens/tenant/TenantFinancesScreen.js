@@ -120,8 +120,8 @@ export default function TenantFinancesScreen({ user }) {
   const balance = tenantInfo.outstandingBalance || billingBreakdown?.outstanding || 0;
   const isOverdue = balance > 0 && billingBreakdown?.dueDate && new Date(billingBreakdown.dueDate) < new Date();
   
-  const currentInvoice = billingBreakdown ? {
-    id: billingBreakdown.invoiceId || 'current',
+  const currentInvoice = billingBreakdown?.invoiceId ? {
+    id: billingBreakdown.invoiceId,
     period: billingBreakdown.month,
     outstanding: billingBreakdown.outstanding,
   } : null;
@@ -189,7 +189,7 @@ export default function TenantFinancesScreen({ user }) {
         </View>
 
         {/* Submit Payment Button */}
-        {balance > 0 && (
+        {balance > 0 && currentInvoice?.id && (
           <TouchableOpacity
             onPress={() => setShowPaymentModal(true)}
             style={{
@@ -206,6 +206,11 @@ export default function TenantFinancesScreen({ user }) {
             <Ionicons name="cloud-upload-outline" size={20} color="#ffffff" />
             <Text style={{ fontSize: fs(16), fontWeight: '700', color: '#ffffff' }}>Submit Payment Proof</Text>
           </TouchableOpacity>
+        )}
+        {balance > 0 && !currentInvoice?.id && (
+          <Text style={{ color: colors.dangerText, fontSize: fs(13), marginBottom: spacing.lg }}>
+            The bill details are unavailable. Refresh the page or contact the property manager before submitting payment proof.
+          </Text>
         )}
 
         {/* Payment Instructions */}
@@ -430,4 +435,3 @@ export default function TenantFinancesScreen({ user }) {
     </View>
   );
 }
-

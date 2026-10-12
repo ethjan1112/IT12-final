@@ -3,11 +3,44 @@ import { View, Text, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Tex
 import { Ionicons } from '@expo/vector-icons';
 import { isMobile, isDesktop, getResponsivePadding, fs, spacing, cardStyle, cardShadow } from '../../utils/responsive';
 import { useTheme } from '../../utils/ThemeContext';
-import { getCurrentTenant, getTenantBillingBreakdown, getAnnouncements, getTenantExtensionRequests, submitDueDateExtensionRequest } from '../../services/dataService';
+import { getCurrentTenant, getTenantBillingBreakdown, getAnnouncements, getTenantNotifications, getTenantExtensionRequests, submitDueDateExtensionRequest } from '../../services/dataService';
 import AnnouncementDetailsModal from '../../components/AnnouncementDetailsModal';
 import TenantApplicationStatusCard from '../../components/tenant/TenantApplicationStatusCard';
 
-const formatCalendarDate = (date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+const formatDateKey = (date) => (
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+);
+
+const parseCalendarDate = (value) => {
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || '').trim());
+  let year;
+  let month;
+  let day;
+
+  if (isoMatch) {
+    [, year, month, day] = isoMatch;
+    year = Number(year);
+    month = Number(month);
+    day = Number(day);
+  } else {
+    const displayMatch = /^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/.exec(String(value || '').trim());
+    if (!displayMatch) return null;
+    const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+    const monthName = displayMatch[1].toLowerCase();
+    month = months.findIndex((name) => name === monthName || name.slice(0, 3) === monthName) + 1;
+    day = Number(displayMatch[2]);
+    year = Number(displayMatch[3]);
+  }
+
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+  return date;
+};
+
+const formatCalendarDate = (value) => {
+  const date = value instanceof Date ? value : parseCalendarDate(value);
+  return date ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+};
 
 const getAnnouncementTime = (announcement) => {
   const idTime = Number(String(announcement.announcement_id || announcement.id || '').match(/\d{10,}/)?.[0]);
@@ -16,7 +49,7 @@ const getAnnouncementTime = (announcement) => {
   return Number.isNaN(dateTime) ? 0 : dateTime;
 };
 
-export default function TenantHomeScreen({ user, onNavigateToUpdates }) {
+export default function TenantHomeScreen({ user, onNavigateToNotifications }) {
   const { colors } = useTheme();
   const padding = getResponsivePadding();
   const containerMaxWidth = isDesktop ? 1180 : '100%';
@@ -46,17 +79,26 @@ export default function TenantHomeScreen({ user, onNavigateToUpdates }) {
       try {
         setLoading(true);
         setError(null);
-        const [tenantData, billingData, announcementsData, extensionData] = await Promise.all([
+        const [tenantData, billingData, announcementsData, notificationsData, extensionData] = await Promise.all([
           getCurrentTenant(user?.tenant_id),
           getTenantBillingBreakdown(user?.tenant_id),
           getAnnouncements(),
+          getTenantNotifications(user?.tenant_id),
           getTenantExtensionRequests(user?.tenant_id),
         ]);
         if (isMounted) {
           setTenant(tenantData);
           setBilling(billingData);
-          const latestAnnouncement = [...(announcementsData || [])].sort((a, b) => getAnnouncementTime(b) - getAnnouncementTime(a))[0] || null;
-          setLatestNotice(latestAnnouncement);
+          const announcements = (announcementsData || []).map((announcement) => ({
+            ...announcement,
+            type: 'announcement',
+            message: announcement.description,
+            created_at: new Date(getAnnouncementTime(announcement)).toISOString(),
+            announcement,
+          }));
+          const notices = [...(notificationsData || []), ...announcements]
+            .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+          setLatestNotice(notices[0] || null);
           setExtensionRequests(extensionData);
         }
       } catch (err) {
@@ -77,13 +119,13 @@ export default function TenantHomeScreen({ user, onNavigateToUpdates }) {
   }, [user?.tenant_id, refreshKey]);
 
   const sendExtensionRequest = async () => {
-    const requestedDate = new Date(requestedDueDate);
-    if (!requestedDueDate.trim() || Number.isNaN(requestedDate.getTime())) {
+    const requestedDate = parseCalendarDate(requestedDueDate);
+    if (!requestedDate) {
       setExtensionError('Enter a valid requested date, such as Oct 12, 2026.');
       return;
     }
-    const currentDueDate = new Date(tenant?.dueDate);
-    if (!Number.isNaN(currentDueDate.getTime()) && requestedDate <= currentDueDate) {
+    const currentDueDate = parseCalendarDate(tenant?.dueDate);
+    if (currentDueDate && formatDateKey(requestedDate) <= formatDateKey(currentDueDate)) {
       setExtensionError('The requested date must be after your current due date.');
       return;
     }
@@ -93,7 +135,7 @@ export default function TenantHomeScreen({ user, onNavigateToUpdates }) {
       setExtensionError('');
       const request = await submitDueDateExtensionRequest({
         tenantId: user?.tenant_id,
-        requestedDueDate: requestedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        requestedDueDate: formatCalendarDate(requestedDate),
         reason: extensionReason,
       });
       setExtensionRequests((current) => [request, ...current]);
@@ -445,23 +487,6 @@ export default function TenantHomeScreen({ user, onNavigateToUpdates }) {
 
             </View>
             <View style={{ flex: isDesktop ? 1 : undefined, width: isDesktop ? undefined : '100%', gap: spacing.lg }}>
-            {extensionRequests.length > 0 && (
-              <View>
-                <Text style={{ fontSize: fs(15), fontWeight: '700', color: colors.text, marginBottom: 12 }}>Due Date Requests</Text>
-                <View style={{ ...cardStyle, backgroundColor: colors.card, borderColor: colors.cardBorder, borderRadius: 18, padding: 17, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <View style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: colors.warningBg, alignItems: 'center', justifyContent: 'center' }}>
-                    <Ionicons name="calendar-outline" size={19} color={colors.warningText} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: fs(14), color: colors.text, fontWeight: '700' }}>Latest request</Text>
-                  <Text style={{ fontSize: fs(13), color: colors.textSecondary, marginTop: 5 }}>
-                    {extensionRequests[0].currentDueDate} → {extensionRequests[0].requestedDueDate} · {extensionRequests[0].status}
-                  </Text>
-                  </View>
-                </View>
-              </View>
-            )}
-
             {/* ── Latest Notice Section ──────────────────── */}
             <View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11, marginBottom: 12 }}>
@@ -472,13 +497,26 @@ export default function TenantHomeScreen({ user, onNavigateToUpdates }) {
                   <Text style={{ fontSize: fs(16), fontWeight: '800', color: colors.text }}>Latest notice</Text>
                   <Text style={{ fontSize: fs(12), color: colors.textMuted, marginTop: 2 }}>Updates from your property</Text>
                 </View>
-                {!!latestNotice && <Ionicons name="arrow-forward" size={18} color={colors.textMuted} />}
+                <TouchableOpacity
+                  onPress={onNavigateToNotifications}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open notifications"
+                >
+                  <Ionicons name="arrow-forward" size={18} color={colors.textMuted} />
+                </TouchableOpacity>
               </View>
 
               {latestNotice && (
                 <TouchableOpacity
                   activeOpacity={0.8}
-                  onPress={() => setSelectedAnnouncement(latestNotice)}
+                  onPress={() => {
+                    if (latestNotice.announcement) {
+                      setSelectedAnnouncement(latestNotice.announcement);
+                    } else {
+                      onNavigateToNotifications?.();
+                    }
+                  }}
                   style={{
                     ...cardStyle,
                     backgroundColor: colors.card,
@@ -501,7 +539,7 @@ export default function TenantHomeScreen({ user, onNavigateToUpdates }) {
                       fontWeight: '800',
                       color: colors.warningText,
                     }}>
-                      {latestNotice.category}
+                      {latestNotice.category || latestNotice.type}
                     </Text>
                   </View>
 
@@ -522,7 +560,7 @@ export default function TenantHomeScreen({ user, onNavigateToUpdates }) {
                     }}
                     numberOfLines={2}
                   >
-                    {latestNotice.description}
+                    {latestNotice.message || latestNotice.description}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -677,7 +715,7 @@ export default function TenantHomeScreen({ user, onNavigateToUpdates }) {
                   Request Sent!
                 </Text>
                 <Text style={{ fontSize: fs(14), color: colors.textMuted, textAlign: 'center', marginTop: 6 }}>
-                  Your request for {requestedDueDate} was saved for caretaker review.
+                  Your request for {formatCalendarDate(requestedDueDate)} was saved for caretaker review.
                 </Text>
                 <TouchableOpacity
                   onPress={() => setShowExtensionModal(false)}
@@ -708,7 +746,7 @@ export default function TenantHomeScreen({ user, onNavigateToUpdates }) {
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.searchBg, borderColor: colors.searchBorder, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, marginBottom: calendarVisible ? 10 : 12 }}
                 >
                   <Ionicons name="calendar-outline" size={19} color={colors.accent} />
-                  <Text style={{ flex: 1, fontSize: fs(15), color: requestedDueDate ? colors.text : colors.textMuted }}>{requestedDueDate || 'Select a date'}</Text>
+                  <Text style={{ flex: 1, fontSize: fs(15), color: requestedDueDate ? colors.text : colors.textMuted }}>{formatCalendarDate(requestedDueDate) || 'Select a date'}</Text>
                   <Ionicons name={calendarVisible ? 'chevron-up' : 'chevron-down'} size={17} color={colors.textMuted} />
                 </TouchableOpacity>
                 {calendarVisible && (() => {
@@ -717,8 +755,7 @@ export default function TenantHomeScreen({ user, onNavigateToUpdates }) {
                   const firstWeekday = new Date(year, month, 1).getDay();
                   const daysInMonth = new Date(year, month + 1, 0).getDate();
                   const cells = [...Array(firstWeekday).fill(null), ...Array.from({ length: daysInMonth }, (_, index) => index + 1)];
-                  const dueDate = new Date(tenant.dueDate);
-                  dueDate.setHours(0, 0, 0, 0);
+                  const dueDateKey = parseCalendarDate(tenant.dueDate) ? formatDateKey(parseCalendarDate(tenant.dueDate)) : null;
                   return (
                     <View style={{ padding: 12, marginBottom: 12, borderRadius: 14, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -735,17 +772,17 @@ export default function TenantHomeScreen({ user, onNavigateToUpdates }) {
                       </View>
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
                         {cells.map((day, index) => {
-                          const selected = day && requestedDueDate === formatCalendarDate(new Date(year, month, day));
+                          const dayKey = day ? formatDateKey(new Date(year, month, day)) : null;
+                          const selected = day && requestedDueDate === dayKey;
                           const chosenDate = day ? new Date(year, month, day) : null;
-                          if (chosenDate) chosenDate.setHours(0, 0, 0, 0);
-                          const disabled = !day || (Number.isNaN(dueDate.getTime()) ? false : chosenDate <= dueDate);
+                          const disabled = !day || (dueDateKey ? dayKey <= dueDateKey : false);
                           return (
                             <TouchableOpacity
                               key={`day-${index}`}
                               disabled={disabled}
                               accessibilityRole={day ? 'button' : undefined}
-                              accessibilityLabel={day ? formatCalendarDate(new Date(year, month, day)) : undefined}
-                              onPress={() => { setRequestedDueDate(formatCalendarDate(new Date(year, month, day))); setExtensionError(''); setCalendarVisible(false); }}
+                              accessibilityLabel={day ? formatCalendarDate(chosenDate) : undefined}
+                              onPress={() => { setRequestedDueDate(dayKey); setExtensionError(''); setCalendarVisible(false); }}
                               style={{ width: '14.285%', height: 38, alignItems: 'center', justifyContent: 'center' }}
                             >
                               {day ? <Text style={{ width: 32, height: 32, textAlign: 'center', textAlignVertical: 'center', lineHeight: 32, borderRadius: 16, overflow: 'hidden', backgroundColor: selected ? colors.primary : 'transparent', color: selected ? colors.onPrimary : disabled ? colors.textMuted : colors.text, opacity: disabled ? 0.4 : 1, fontSize: fs(13), fontWeight: selected ? '800' : '500' }}>{day}</Text> : null}

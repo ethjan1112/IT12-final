@@ -469,7 +469,7 @@ export default function RoomsScreen() {
           )}
         </View>
         </ScrollView>
-        <View style={{ maxWidth: containerMaxWidth, width: '100%', minHeight: 96, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 22 }}>
+        <View style={{ maxWidth: containerMaxWidth, width: '100%', minHeight: 44, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 22 }}>
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityLabel="Previous four rooms"

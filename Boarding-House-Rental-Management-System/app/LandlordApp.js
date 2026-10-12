@@ -19,10 +19,11 @@ import PendingApprovalsScreen from './screens/landlord/PendingApprovalsScreen';
 import TenantFinancialManagement from './screens/landlord/TenantFinancialManagement';
 import TenantDetailFinancial from './screens/landlord/TenantDetailFinancial';
 import PaymentProofReviewScreen from './screens/landlord/PaymentProofReviewScreen';
+import DueDateExtensionRequestsScreen from './screens/landlord/DueDateExtensionRequestsScreen';
 
 // Import navigation
 import LandlordBottomNav from './components/LandlordBottomNav';
-import { getPendingTenantRegistrationCount } from './services/dataService';
+import { getPendingDueDateExtensionRequestCount, getPendingTenantRegistrationCount } from './services/dataService';
 
 export default function LandlordApp({ user, onLogout }) {
   const [activeScreen, setActiveScreen] = useState('dashboard');
@@ -30,14 +31,21 @@ export default function LandlordApp({ user, onLogout }) {
   const [slideAnim] = useState(new Animated.Value(-280));
   const [navigationParams, setNavigationParams] = useState(null);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
+  const [pendingExtensionRequestsCount, setPendingExtensionRequestsCount] = useState(0);
   const { isDark, toggleTheme, colors } = useTheme();
 
   useEffect(() => {
     let isMounted = true;
     const refreshSignupCount = async () => {
       try {
-        const count = await getPendingTenantRegistrationCount();
-        if (isMounted) setPendingApprovalsCount(count);
+        const [approvalCount, extensionCount] = await Promise.all([
+          getPendingTenantRegistrationCount(),
+          getPendingDueDateExtensionRequestCount(),
+        ]);
+        if (isMounted) {
+          setPendingApprovalsCount(approvalCount);
+          setPendingExtensionRequestsCount(extensionCount);
+        }
       } catch (error) {
         console.warn('Could not refresh tenant sign-up badge:', error.message || error);
       }
@@ -74,6 +82,8 @@ export default function LandlordApp({ user, onLogout }) {
         return 'Tenant Financial Details';
       case 'payment-proofs':
         return 'Payment Verification';
+      case 'due-date-requests':
+        return 'Due Date Requests';
       default:
         return 'Dashboard';
     }
@@ -126,6 +136,18 @@ export default function LandlordApp({ user, onLogout }) {
         return <TenantDetailFinancial route={{ params: navigationParams }} navigation={navigation} />;
       case 'payment-proofs':
         return <PaymentProofReviewScreen />;
+      case 'due-date-requests':
+        return (
+          <DueDateExtensionRequestsScreen
+            onRequestReviewed={async () => {
+              try {
+                setPendingExtensionRequestsCount(await getPendingDueDateExtensionRequestCount());
+              } catch (error) {
+                console.warn('Could not refresh due-date request badge:', error.message || error);
+              }
+            }}
+          />
+        );
       default:
         return <LandlordDashboard />;
     }
@@ -157,6 +179,7 @@ export default function LandlordApp({ user, onLogout }) {
 
   const menuItems = [
     { id: 'billing', label: 'Billing', icon: 'card', iconOutline: 'card-outline' },
+    { id: 'due-date-requests', label: 'Due Date Requests', icon: 'calendar', iconOutline: 'calendar-outline' },
     { id: 'issues', label: 'Issues', icon: 'alert-circle', iconOutline: 'alert-circle-outline' },
     { id: 'announcements', label: 'Announcements', icon: 'megaphone', iconOutline: 'megaphone-outline' },
     { id: 'reports', label: 'Reports', icon: 'bar-chart', iconOutline: 'bar-chart-outline' },
@@ -200,10 +223,16 @@ export default function LandlordApp({ user, onLogout }) {
               <ScrollView showsVerticalScrollIndicator={false}>
                 {menuItems.map((item) => {
                   const isActive = activeScreen === item.id;
+                  const badgeCount = item.id === 'due-date-requests' ? pendingExtensionRequestsCount : 0;
                   return (
                     <TouchableOpacity key={item.id} activeOpacity={0.7} onPress={() => handleMenuNavigate(item.id)} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 12, marginBottom: 6, backgroundColor: isActive ? colors.accentBg : 'transparent' }}>
                       <Ionicons name={isActive ? item.icon : item.iconOutline} size={22} color={isActive ? colors.accent : colors.textSecondary} />
-                      <Text style={{ fontSize: fs(15), fontWeight: isActive ? '700' : '500', color: isActive ? colors.accent : colors.text }}>{item.label}</Text>
+                      <Text style={{ flex: 1, fontSize: fs(15), fontWeight: isActive ? '700' : '500', color: isActive ? colors.accent : colors.text }}>{item.label}</Text>
+                      {badgeCount > 0 && (
+                        <View style={{ minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6, backgroundColor: colors.dangerText, alignItems: 'center', justifyContent: 'center' }}>
+                          <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>{badgeCount > 99 ? '99+' : badgeCount}</Text>
+                        </View>
+                      )}
                     </TouchableOpacity>
                   );
                 })}

@@ -1,11 +1,12 @@
-const admin = require('firebase-admin');
+const { applicationDefault, deleteApp, initializeApp } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
 
-admin.initializeApp({
-  credential: admin.credential.applicationDefault(),
+const app = initializeApp({
+  credential: applicationDefault(),
   projectId: 'boardinghouse-rental-mgt',
 });
 
-const db = admin.firestore();
+const db = getFirestore(app);
 const applyChanges = process.argv.includes('--apply');
 
 async function commitInChunks(updates) {
@@ -97,4 +98,4 @@ main()
     console.error('Initial advance migration failed:', error);
     process.exitCode = 1;
   })
-  .finally(() => admin.app().delete());
+  .finally(() => deleteApp(app));
