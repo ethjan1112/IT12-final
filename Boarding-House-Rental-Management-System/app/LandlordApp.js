@@ -22,7 +22,7 @@ import PaymentProofReviewScreen from './screens/landlord/PaymentProofReviewScree
 
 // Import navigation
 import LandlordBottomNav from './components/LandlordBottomNav';
-import { getPendingTenantRegistrationCount } from './services/dataService';
+import { getPendingPaymentProofCount, getPendingTenantRegistrationCount } from './services/dataService';
 
 export default function LandlordApp({ user, onLogout }) {
   const [activeScreen, setActiveScreen] = useState('dashboard');
@@ -30,14 +30,21 @@ export default function LandlordApp({ user, onLogout }) {
   const [slideAnim] = useState(new Animated.Value(-280));
   const [navigationParams, setNavigationParams] = useState(null);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
+  const [pendingPaymentProofCount, setPendingPaymentProofCount] = useState(0);
   const { isDark, toggleTheme, colors } = useTheme();
 
   useEffect(() => {
     let isMounted = true;
     const refreshSignupCount = async () => {
       try {
-        const count = await getPendingTenantRegistrationCount();
-        if (isMounted) setPendingApprovalsCount(count);
+        const [applications, paymentProofs] = await Promise.all([
+          getPendingTenantRegistrationCount(),
+          getPendingPaymentProofCount(),
+        ]);
+        if (isMounted) {
+          setPendingApprovalsCount(applications);
+          setPendingPaymentProofCount(paymentProofs);
+        }
       } catch (error) {
         console.warn('Could not refresh tenant sign-up badge:', error.message || error);
       }
@@ -59,7 +66,7 @@ export default function LandlordApp({ user, onLogout }) {
       case 'rooms':
         return 'Rooms';
       case 'billing':
-        return 'Billing';
+        return 'Bills & Utilities';
       case 'issues':
         return 'Issues';
       case 'announcements':
@@ -67,13 +74,13 @@ export default function LandlordApp({ user, onLogout }) {
       case 'reports':
         return 'Reports';
       case 'approvals':
-        return 'Pending Approvals';
+        return 'Tenant Applications';
       case 'finances':
         return 'Tenant Finances';
       case 'tenant-detail':
         return 'Tenant Financial Details';
       case 'payment-proofs':
-        return 'Payment Verification';
+        return 'Payment Proof Review';
       default:
         return 'Dashboard';
     }
@@ -121,11 +128,11 @@ export default function LandlordApp({ user, onLogout }) {
       case 'approvals':
         return <PendingApprovalsScreen />;
       case 'finances':
-        return <TenantFinancialManagement navigation={navigation} />;
+        return <TenantFinancialManagement navigation={navigation} pendingPaymentProofCount={pendingPaymentProofCount} />;
       case 'tenant-detail':
         return <TenantDetailFinancial route={{ params: navigationParams }} navigation={navigation} />;
       case 'payment-proofs':
-        return <PaymentProofReviewScreen />;
+        return <PaymentProofReviewScreen navigation={navigation} reviewerUserId={user?.uid} />;
       default:
         return <LandlordDashboard />;
     }
@@ -156,7 +163,7 @@ export default function LandlordApp({ user, onLogout }) {
   };
 
   const menuItems = [
-    { id: 'billing', label: 'Billing', icon: 'card', iconOutline: 'card-outline' },
+    { id: 'billing', label: 'Bills & Utilities', icon: 'card', iconOutline: 'card-outline' },
     { id: 'issues', label: 'Issues', icon: 'alert-circle', iconOutline: 'alert-circle-outline' },
     { id: 'announcements', label: 'Announcements', icon: 'megaphone', iconOutline: 'megaphone-outline' },
     { id: 'reports', label: 'Reports', icon: 'bar-chart', iconOutline: 'bar-chart-outline' },
@@ -177,13 +184,13 @@ export default function LandlordApp({ user, onLogout }) {
 
       {isDesktop ? (
         <View style={{ flex: 1, flexDirection: 'row' }}>
-          <LandlordBottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} user={user} pendingApprovalsCount={pendingApprovalsCount} />
+          <LandlordBottomNav activeScreen={activeScreen} onNavigate={handleNavigate} user={user} pendingApprovalsCount={pendingApprovalsCount} pendingPaymentProofCount={pendingPaymentProofCount} />
           <View style={{ flex: 1 }}>{renderScreen()}</View>
         </View>
       ) : (
         <>
           <View style={{ flex: 1 }}>{renderScreen()}</View>
-          <LandlordBottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} user={user} pendingApprovalsCount={pendingApprovalsCount} />
+          <LandlordBottomNav activeScreen={activeScreen} onNavigate={handleNavigate} user={user} pendingApprovalsCount={pendingApprovalsCount} pendingPaymentProofCount={pendingPaymentProofCount} />
         </>
       )}
 

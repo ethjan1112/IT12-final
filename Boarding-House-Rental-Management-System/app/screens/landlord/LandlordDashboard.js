@@ -1,10 +1,23 @@
 import ScreenSkeleton from '../../components/ScreenSkeleton';
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { isMobile, isDesktop, getResponsivePadding, fs, spacing, cardStyle, cardShadow } from '../../utils/responsive';
 import { useTheme } from '../../utils/ThemeContext';
 import { getBoardingHouseConfig, getRevenue, getOccupancyStats, getUnpaidStats, getIssueStats, getUnpaidTenants } from '../../services/dataService';
+
+const getCurrentPeriod = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+};
+
+const shiftPeriod = (period, amount) => {
+  const [year, month] = period.split('-').map(Number);
+  const date = new Date(year, month - 1 + amount, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+};
+
+const formatPeriod = (period) => new Date(`${period}-01T12:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
 export default function OwnerDashboard() {
   const { colors } = useTheme();
@@ -19,12 +32,13 @@ export default function OwnerDashboard() {
   const [unpaidStats, setUnpaidStats] = useState(null);
   const [issueStats, setIssueStats] = useState(null);
   const [unpaidTenants, setUnpaidTenants] = useState([]);
+  const [selectedPeriod, setSelectedPeriod] = useState(getCurrentPeriod);
 
   useEffect(() => {
     const loadData = async () => {
       try {
         const configData = await getBoardingHouseConfig();
-        const revenueData = await getRevenue('september');
+        const revenueData = await getRevenue(selectedPeriod);
         const occupancyData = await getOccupancyStats();
         const unpaidStatsData = await getUnpaidStats();
         const issueStatsData = await getIssueStats();
@@ -43,7 +57,7 @@ export default function OwnerDashboard() {
       }
     };
     loadData();
-  }, []);
+  }, [selectedPeriod]);
 
   if (loading) return <ScreenSkeleton />;
   if (error) return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}><Text style={{ color: colors.danger, fontSize: 16 }}>{error}</Text></View>;
@@ -74,6 +88,19 @@ export default function OwnerDashboard() {
           </View>
 
           <View style={{ paddingHorizontal: padding, gap: spacing.lg }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', ...cardStyle, backgroundColor: colors.card, borderColor: colors.cardBorder, paddingHorizontal: 14, paddingVertical: 10 }}>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Previous month" onPress={() => setSelectedPeriod((period) => shiftPeriod(period, -1))} style={{ width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg }}>
+                <Ionicons name="chevron-back" size={20} color={colors.text} />
+              </TouchableOpacity>
+              <View style={{ alignItems: 'center' }}>
+                <Text style={{ fontSize: fs(10), color: colors.textMuted, fontWeight: '700', letterSpacing: 1 }}>VIEWING MONTH</Text>
+                <Text style={{ fontSize: fs(15), color: colors.text, fontWeight: '800', marginTop: 3 }}>{formatPeriod(selectedPeriod)}</Text>
+              </View>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Next month" onPress={() => setSelectedPeriod((period) => shiftPeriod(period, 1))} style={{ width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg }}>
+                <Ionicons name="chevron-forward" size={20} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
             {/* ── Revenue Hero Card ───────────────────── */}
             <View style={{
               borderRadius: 24,
@@ -106,7 +133,7 @@ export default function OwnerDashboard() {
                   textTransform: 'uppercase',
                   marginBottom: 12,
                 }}>
-                  September revenue
+                  {formatPeriod(selectedPeriod)} revenue
                 </Text>
 
                 <Text style={{

@@ -100,7 +100,7 @@ async function getStore() {
   if (!tenant) return Object.fromEntries(collectionNames.map((name) => [name, []]));
 
   const tenantStore = Object.fromEntries(collectionNames.map((name) => [name, []]));
-  const [boardingHouses, roomTypes, rooms, leases, complaints, announcements, extensionRequests, roomChangeRequests] = await Promise.all([
+  const [boardingHouses, roomTypes, rooms, leases, complaints, announcements, extensionRequests, roomChangeRequests, paymentProofs, tenantNotifications] = await Promise.all([
     readCollection(COLLECTIONS.BOARDING_HOUSES),
     readCollection(COLLECTIONS.ROOM_TYPES),
     readCollection(COLLECTIONS.ROOMS),
@@ -109,6 +109,8 @@ async function getStore() {
     readCollection(COLLECTIONS.ANNOUNCEMENTS),
     readWhere(COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS, 'tenant_id', tenant.id).catch(() => []),
     readWhere(COLLECTIONS.ROOM_CHANGE_REQUESTS, 'tenant_id', tenant.id).catch(() => []),
+    readWhere(COLLECTIONS.PAYMENT_PROOFS, 'tenant_id', tenant.id).catch(() => []),
+    readWhere(COLLECTIONS.TENANT_NOTIFICATIONS, 'tenant_id', tenant.id).catch(() => []),
   ]);
   const invoices = (await Promise.all(leases.map((lease) => readWhere(COLLECTIONS.INVOICES, 'lease_id', lease.id)))).flat();
   const payments = (await Promise.all(invoices.map((invoice) => readWhere(COLLECTIONS.PAYMENTS, 'invoice_id', invoice.id)))).flat();
@@ -125,6 +127,8 @@ async function getStore() {
   tenantStore[COLLECTIONS.ANNOUNCEMENTS] = announcements;
   tenantStore[COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS] = extensionRequests;
   tenantStore[COLLECTIONS.ROOM_CHANGE_REQUESTS] = roomChangeRequests;
+  tenantStore[COLLECTIONS.PAYMENT_PROOFS] = paymentProofs;
+  tenantStore[COLLECTIONS.TENANT_NOTIFICATIONS] = tenantNotifications;
   return tenantStore;
 
 }
@@ -385,26 +389,26 @@ export async function getUnpaidTenants() {
 /**
  * 5. Monthly Revenue Aggregations
  */
-export async function getRevenue(month = 'september') {
+export async function getRevenue(billingPeriod = '2026-09') {
   try {
     const store = await getStore();
     const invoices = store[COLLECTIONS.INVOICES] || [];
     const payments = store[COLLECTIONS.PAYMENTS] || [];
 
-    const septInvoices = invoices.filter((inv) => inv.billing_period === '2026-09');
-    const expected = septInvoices.reduce((sum, inv) => sum + getInvoiceTotalAmount(inv), 0);
+    // Keep compatibility with the old month-name argument while screens use YYYY-MM.
+    const period = /^\d{4}-\d{2}$/.test(billingPeriod) ? billingPeriod : '2026-09';
+    const periodInvoices = invoices.filter((inv) => inv.billing_period === period);
+    const invoiceIds = new Set(periodInvoices.map((inv) => inv.id));
+    const expected = periodInvoices.reduce((sum, inv) => sum + getInvoiceTotalAmount(inv), 0);
 
-    const septPayments = payments.filter((p) => {
-      const inv = invoices.find((i) => i.id === p.invoice_id);
-      return inv && inv.billing_period === '2026-09';
-    });
+    const periodPayments = payments.filter((payment) => invoiceIds.has(payment.invoice_id));
 
-    const collected = septPayments.reduce((sum, p) => sum + (p.amount_paid || 0), 0);
+    const collected = periodPayments.reduce((sum, payment) => sum + (Number(payment.amount_paid) || 0), 0);
     const outstanding = Math.max(0, expected - collected);
     const percentCollected = expected > 0 ? Math.round((collected / expected) * 100) : 0;
 
-    const rentCollected = septInvoices.reduce((sum, inv) => sum + (inv.rent_charge || 0), 0);
-    const electricityFees = septInvoices.reduce((sum, inv) => sum + (inv.utility_charge || 0), 0);
+    const rentCollected = periodInvoices.reduce((sum, inv) => sum + (Number(inv.rent_charge) || 0), 0);
+    const electricityFees = periodInvoices.reduce((sum, inv) => sum + (Number(inv.utility_charge) || 0), 0);
 
     return {
       expected: expected || 0,
@@ -423,31 +427,27 @@ export async function getRevenue(month = 'september') {
 /**
  * 6. Historical Monthly Income
  */
-export async function getMonthlyIncome() {
+export async function getMonthlyIncome(endPeriod = '2026-09', monthCount = 5) {
   try {
     const store = await getStore();
     const invoices = store[COLLECTIONS.INVOICES] || [];
     const payments = store[COLLECTIONS.PAYMENTS] || [];
+    const [year, month] = endPeriod.split('-').map(Number);
+    const periods = Array.from({ length: monthCount }, (_, index) => {
+      const date = new Date(year, month - monthCount + index + 1, 1);
+      return {
+        period: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
+        month: date.toLocaleDateString('en-US', { month: 'short' }),
+      };
+    });
 
-    const periods = [
-      { month: 'May', period: '2026-05', defaultAmount: 0 },
-      { month: 'Jun', period: '2026-06', defaultAmount: 0 },
-      { month: 'Jul', period: '2026-07', defaultAmount: 0 },
-      { month: 'Aug', period: '2026-08', defaultAmount: 0 },
-      { month: 'Sep', period: '2026-09', defaultAmount: 0 },
-    ];
-
-    return periods.map(({ month, period, defaultAmount }) => {
-      const periodInvoices = invoices.filter((inv) => inv.billing_period === period);
-      if (periodInvoices.length === 0) {
-        return { month, amount: defaultAmount };
-      }
-      const periodPayments = payments.filter((p) => {
-        const inv = invoices.find((i) => i.id === p.invoice_id);
-        return inv && inv.billing_period === period;
-      });
-      const amount = periodPayments.reduce((sum, p) => sum + (p.amount_paid || 0), 0);
-      return { month, amount: amount || defaultAmount };
+    return periods.map(({ month: monthLabel, period }) => {
+      const periodInvoices = invoices.filter((invoice) => invoice.billing_period === period);
+      const invoiceIds = new Set(periodInvoices.map((invoice) => invoice.id));
+      const amount = payments
+        .filter((payment) => invoiceIds.has(payment.invoice_id))
+        .reduce((sum, payment) => sum + (Number(payment.amount_paid) || 0), 0);
+      return { month: monthLabel, period, amount };
     });
   } catch (error) {
     console.error('Error computing monthly income:', error);
@@ -549,27 +549,39 @@ export async function getUnpaidStats() {
 }
 
 /**
- * 11. September Summary for Reports
+ * 11. Period Summary for Reports
  */
-export async function getSeptemberSummary() {
+export async function getPeriodSummary(period = '2026-09') {
   try {
-    const revenue = await getRevenue('september');
-    const occupancy = await getOccupancyStats();
-    const issueStats = await getIssueStats();
-
+    const [store, revenue, occupancy] = await Promise.all([
+      getStore(),
+      getRevenue(period),
+      getOccupancyStats(),
+    ]);
+    const complaints = store[COLLECTIONS.COMPLAINTS] || [];
+    const periodComplaints = complaints.filter((complaint) => {
+      const dateValue = complaint.filed_at || complaint.created_at;
+      const date = dateValue?.toDate ? dateValue.toDate() : new Date(dateValue);
+      return !Number.isNaN(date.getTime()) && `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` === period;
+    });
     return {
       rentCollected: revenue.rentCollected,
       unpaidBalance: revenue.outstanding,
       electricityFees: revenue.electricityFees,
       occupiedRooms: occupancy.occupied,
       totalRooms: occupancy.totalRooms,
-      newComplaints: issueStats.total,
-      resolved: issueStats.resolved,
+      newComplaints: periodComplaints.length,
+      resolved: periodComplaints.filter((complaint) => complaint.status === 'resolved').length,
     };
   } catch (error) {
-    console.error('Error computing September summary:', error);
+    console.error('Error computing period summary:', error);
     return { rentCollected: 0, unpaidBalance: 0, electricityFees: 0, occupiedRooms: 0, totalRooms: 0, newComplaints: 0, resolved: 0 };
   }
+}
+
+// Backward-compatible alias for any older screen still using the previous report helper.
+export async function getSeptemberSummary() {
+  return getPeriodSummary('2026-09');
 }
 
 /**
@@ -755,6 +767,21 @@ async function getInitialPaymentProofUrl(path) {
   return data.signedUrl;
 }
 
+async function getPaymentProofUrl(path) {
+  if (!path || /^https?:\/\//i.test(path) || path.startsWith('data:')) return path || '';
+  if (!supabase) return '';
+  try {
+    const { data, error } = await supabase.storage
+      .from('initial-payment-proofs')
+      .createSignedUrl(path, 60 * 60);
+    if (error) throw error;
+    return data.signedUrl;
+  } catch (error) {
+    console.warn('Could not create a payment receipt preview URL:', error.message || error);
+    return '';
+  }
+}
+
 /** Resize and upload a receipt image to the private Supabase bucket. */
 export async function uploadInitialPaymentProof({ tenantId, asset }) {
   if (!asset?.uri) throw new Error('Choose a payment proof photo first.');
@@ -774,6 +801,11 @@ export async function uploadInitialPaymentProof({ tenantId, asset }) {
     .upload(objectPath, imageBuffer, { contentType: 'image/jpeg', upsert: false });
   if (error) throw new Error(error.message || 'Could not upload the receipt photo to Supabase.');
   return objectPath;
+}
+
+/** Upload a receipt for an existing invoice using the private proof bucket. */
+export async function uploadPaymentProof({ tenantId, asset }) {
+  return uploadInitialPaymentProof({ tenantId, asset });
 }
 
 /** Submit or change a tenant's preferred initial room; staff still assign the room. */
@@ -876,7 +908,14 @@ export async function getTenantBillingBreakdown(id = '2') {
     const payments = store[COLLECTIONS.PAYMENTS] || [];
 
     const lease = leases.find((l) => l.tenant_id === formattedId && l.status === 'active');
-    const invoice = lease ? getLatestInvoiceForLease(invoices, lease.id) : null;
+    const leaseInvoices = lease ? invoices.filter((item) => item.lease_id === lease.id) : [];
+    const invoice = lease
+      ? leaseInvoices
+        .filter((item) => getInvoiceBalance(item.id, store) > 0)
+        .sort((a, b) => String(a.due_date || '').localeCompare(String(b.due_date || '')))[0]
+        || getLatestInvoiceForLease(invoices, lease.id)
+      : null;
+    const totalOutstanding = leaseInvoices.reduce((total, item) => total + getInvoiceBalance(item.id, store), 0);
 
     if (invoice) {
       const invPayments = payments.filter((p) => p.invoice_id === invoice.id);
@@ -886,6 +925,8 @@ export async function getTenantBillingBreakdown(id = '2') {
       const latestPayment = [...invPayments].sort((a, b) => String(b.payment_date || '').localeCompare(String(a.payment_date || '')))[0];
 
       return {
+        invoiceId: invoice.id,
+        totalOutstanding,
         month: invoice.billing_period
           ? new Date(`${invoice.billing_period}-01T12:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
           : 'Current period',
@@ -910,10 +951,24 @@ export async function getTenantBillingBreakdown(id = '2') {
       };
     }
 
-    return { month: '', monthlyRent: 0, electricity: 0, securityDeposit: 0, invoiceType: null, water: 0, additionalCharges: [], totalDue: 0, dueDate: 'Pending room assignment', paidAmount: 0, outstanding: 0 };
+    return {
+      invoiceId: null,
+      month: '',
+      monthlyRent: 0,
+      electricity: 0,
+      securityDeposit: 0,
+      invoiceType: null,
+      water: 0,
+      additionalCharges: [],
+      totalDue: 0,
+      dueDate: 'Pending room assignment',
+      paidAmount: 0,
+      outstanding: 0,
+      totalOutstanding,
+    };
   } catch (error) {
     console.warn('Could not fetch billing breakdown:', error.message || error);
-    return { month: '', monthlyRent: 0, electricity: 0, securityDeposit: 0, invoiceType: null, water: 0, additionalCharges: [], totalDue: 0, dueDate: 'Pending room assignment', paidAmount: 0, outstanding: 0 };
+    return { invoiceId: null, month: '', monthlyRent: 0, electricity: 0, securityDeposit: 0, invoiceType: null, water: 0, additionalCharges: [], totalDue: 0, dueDate: 'Pending room assignment', paidAmount: 0, outstanding: 0, totalOutstanding: 0 };
   }
 }
 
@@ -1619,6 +1674,27 @@ export async function getPendingTenantRegistrationCount() {
   return tenants.filter((tenant) => tenant.account_status === 'pending').length;
 }
 
+/** Return the live count of tenant payment receipts waiting for staff review. */
+export async function getPendingPaymentProofCount() {
+  if (!isFirebaseConfigured || !db) {
+    return getPendingPaymentProofs().then((proofs) => proofs.length);
+  }
+
+  const [pendingProofs, approvedProofs] = await Promise.all([
+    readWhere(COLLECTIONS.PAYMENT_PROOFS, 'status', 'pending'),
+    readWhere(COLLECTIONS.PAYMENT_PROOFS, 'status', 'approved'),
+  ]);
+  const invoiceIds = [...new Set(approvedProofs.map((proof) => proof.invoice_id).filter(Boolean))];
+  const paymentsByInvoice = await Promise.all(invoiceIds.map((invoiceId) => readWhere(COLLECTIONS.PAYMENTS, 'invoice_id', invoiceId)));
+  const payments = paymentsByInvoice.flat();
+  const recoverableCount = approvedProofs.filter((proof) => {
+    const reference = String(proof.reference_no || '').trim() || `PROOF-${proof.id}`;
+    return !payments.some((payment) => payment.invoice_id === proof.invoice_id && payment.reference_no === reference);
+  }).length;
+
+  return pendingProofs.length + recoverableCount;
+}
+
 /**
  * 28. Approve tenant and create lease with initial invoice (Transaction)
  * Creates:
@@ -1628,7 +1704,17 @@ export async function getPendingTenantRegistrationCount() {
  * - Updates room status to 'occupied'
  * - Creates approval notification
  */
-export async function approveTenant({ tenantId, roomId, monthlyRent, dueDay, dueDate: requestedDueDate, approvedBy }) {
+export async function approveTenant({
+  tenantId,
+  roomId,
+  monthlyRent,
+  dueDay,
+  dueDate: requestedDueDate,
+  approvedBy,
+  initialPaymentAmount,
+  initialPaymentDate,
+  initialPaymentReference = '',
+}) {
   try {
     const store = await getStore();
     const tenants = store[COLLECTIONS.TENANTS] || [];
@@ -1649,6 +1735,26 @@ export async function approveTenant({ tenantId, roomId, monthlyRent, dueDay, due
     
     const rent = parseFloat(monthlyRent);
     if (isNaN(rent) || rent <= 0) throw new Error('Invalid monthly rent amount');
+
+    const verifiedInitialPayment = Number(initialPaymentAmount) || 0;
+    if (verifiedInitialPayment < 0) throw new Error('Initial payment cannot be negative');
+    if (verifiedInitialPayment > rent) {
+      throw new Error('The verified initial payment is greater than the assigned room rent. Correct the rent before approving.');
+    }
+    let initialPaymentDateStr = '';
+    if (verifiedInitialPayment > 0) {
+      const paymentDate = /^\d{4}-\d{2}-\d{2}$/.test(String(initialPaymentDate || ''))
+        ? new Date(`${initialPaymentDate}T00:00:00`)
+        : new Date(initialPaymentDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const paymentDay = new Date(paymentDate);
+      paymentDay.setHours(0, 0, 0, 0);
+      if (!initialPaymentDate || Number.isNaN(paymentDate.getTime()) || paymentDay > today) {
+        throw new Error('The submitted initial payment has an invalid or future payment date.');
+      }
+      initialPaymentDateStr = paymentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
     
     const dueDayNum = parseInt(dueDay, 10);
     if (isNaN(dueDayNum) || dueDayNum < 1 || dueDayNum > 31) throw new Error('Due day must be between 1 and 31');
@@ -1670,6 +1776,7 @@ export async function approveTenant({ tenantId, roomId, monthlyRent, dueDay, due
     
     const leaseId = `lease-${Date.now()}`;
     const invoiceId = `invoice-${Date.now()}`;
+    const initialPaymentId = `payment-initial-${Date.now()}`;
     const notificationId = `notif-${Date.now()}`;
     
     // Create records
@@ -1704,10 +1811,21 @@ export async function approveTenant({ tenantId, roomId, monthlyRent, dueDay, due
       other_charges: 0,
       total_amount: rent,
       due_date: dueDateStr,
-      status: 'unpaid',
+      status: verifiedInitialPayment >= rent ? 'paid' : verifiedInitialPayment > 0 ? 'partial' : 'unpaid',
       created_at: approvedAtStr,
       notes: 'Initial payment: 1 month advance',
     };
+
+    const initialPayment = verifiedInitialPayment > 0 ? {
+      id: initialPaymentId,
+      invoice_id: invoiceId,
+      amount_paid: verifiedInitialPayment,
+      payment_date: initialPaymentDateStr,
+      payment_method: 'cash',
+      reference_no: String(initialPaymentReference || '').trim() || `INITIAL-${tenantId}`,
+      received_by_user_id: approvedBy || auth?.currentUser?.uid || 'landlord-uid-1',
+      notes: 'Initial advance payment verified with tenant application proof.',
+    } : null;
     
     const notification = {
       id: notificationId,
@@ -1734,6 +1852,7 @@ export async function approveTenant({ tenantId, roomId, monthlyRent, dueDay, due
       
       batch.set(doc(db, COLLECTIONS.LEASES, leaseId), newLease);
       batch.set(doc(db, COLLECTIONS.INVOICES, invoiceId), newInvoice);
+      if (initialPayment) batch.set(doc(db, COLLECTIONS.PAYMENTS, initialPaymentId), initialPayment);
       batch.update(doc(db, COLLECTIONS.ROOMS, roomId), { status: 'occupied' });
       batch.set(doc(db, COLLECTIONS.TENANT_NOTIFICATIONS, notificationId), notification);
 
@@ -1750,6 +1869,7 @@ export async function approveTenant({ tenantId, roomId, monthlyRent, dueDay, due
       
       mockStore[COLLECTIONS.LEASES].push(newLease);
       mockStore[COLLECTIONS.INVOICES].push(newInvoice);
+      if (initialPayment) mockStore[COLLECTIONS.PAYMENTS].push(initialPayment);
 
       const mockRoom = (mockStore[COLLECTIONS.ROOMS] || []).find((r) => r.id === roomId);
       if (mockRoom) mockRoom.status = 'occupied';
@@ -2326,6 +2446,20 @@ export async function submitPaymentProof({ tenantId, invoiceId, amount, paymentD
     
     const invoice = invoices.find((inv) => inv.id === invoiceId);
     if (!invoice) throw new Error('Invoice not found');
+
+    const activeLease = (store[COLLECTIONS.LEASES] || []).find(
+      (lease) => lease.tenant_id === tenantId && lease.status === 'active'
+    );
+    if (!activeLease || invoice.lease_id !== activeLease.id) throw new Error('This invoice is not assigned to your active lease.');
+    const paymentAmount = Number(amount);
+    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) throw new Error('Enter a valid payment amount.');
+    if (!paymentDate || Number.isNaN(new Date(`${paymentDate}T00:00:00`).getTime())) throw new Error('Enter a valid payment date.');
+    if (!proofImageUrl) throw new Error('Upload a photo of your receipt.');
+    const outstanding = getInvoiceBalance(invoice.id, store);
+    if (paymentAmount > outstanding) throw new Error(`The payment cannot exceed the invoice balance of PHP ${outstanding.toLocaleString()}.`);
+    if ((store[COLLECTIONS.PAYMENT_PROOFS] || []).some((proof) => proof.invoice_id === invoiceId && proof.status === 'pending')) {
+      throw new Error('A payment proof for this invoice is already awaiting review.');
+    }
     
     const proofId = `proof-${Date.now()}`;
     const now = new Date().toISOString();
@@ -2334,7 +2468,7 @@ export async function submitPaymentProof({ tenantId, invoiceId, amount, paymentD
       id: proofId,
       tenant_id: tenantId,
       invoice_id: invoiceId,
-      amount: parseFloat(amount),
+      amount: paymentAmount,
       payment_date: paymentDate,
       payment_method: paymentMethod,
       reference_no: referenceNo || '',
@@ -2357,14 +2491,6 @@ export async function submitPaymentProof({ tenantId, invoiceId, amount, paymentD
       mockStore[COLLECTIONS.PAYMENT_PROOFS].push(paymentProof);
     }
     
-    // Create notification for landlord (optional)
-    await createNotification({
-      tenantId,
-      type: 'payment_proof_submitted',
-      title: 'Payment Proof Submitted',
-      message: `Payment proof for ₱${amount.toLocaleString()} submitted and awaiting verification.`,
-    });
-    
     return paymentProof;
   } catch (error) {
     console.error('Error submitting payment proof:', error);
@@ -2379,14 +2505,20 @@ export async function getPendingPaymentProofs() {
   try {
     const store = await getStore();
     const proofs = store[COLLECTIONS.PAYMENT_PROOFS] || [];
+    const payments = store[COLLECTIONS.PAYMENTS] || [];
     const tenants = store[COLLECTIONS.TENANTS] || [];
     const invoices = store[COLLECTIONS.INVOICES] || [];
     const leases = store[COLLECTIONS.LEASES] || [];
     const rooms = store[COLLECTIONS.ROOMS] || [];
     
-    return proofs
-      .filter((proof) => proof.status === 'pending')
-      .map((proof) => {
+    return (await Promise.all(proofs
+      .filter((proof) => {
+        if (proof.status === 'pending') return true;
+        if (proof.status !== 'approved') return false;
+        const stableReference = String(proof.reference_no || '').trim() || `PROOF-${proof.id}`;
+        return !payments.some((payment) => payment.invoice_id === proof.invoice_id && payment.reference_no === stableReference);
+      })
+      .map(async (proof) => {
         const tenant = tenants.find((t) => t.id === proof.tenant_id);
         const invoice = invoices.find((inv) => inv.id === proof.invoice_id);
         const lease = invoice ? leases.find((l) => l.id === invoice.lease_id) : null;
@@ -2394,6 +2526,7 @@ export async function getPendingPaymentProofs() {
         
         return {
           id: proof.id,
+          needsRecording: proof.status === 'approved',
           tenantId: proof.tenant_id,
           tenantName: tenant ? `${tenant.first_name} ${tenant.last_name}` : 'Unknown',
           tenantInitials: tenant?.initials || 'T',
@@ -2405,11 +2538,11 @@ export async function getPendingPaymentProofs() {
           paymentDate: proof.payment_date,
           paymentMethod: proof.payment_method,
           referenceNo: proof.reference_no,
-          proofImageUrl: proof.proof_image_url,
+          proofImageUrl: await getPaymentProofUrl(proof.proof_image_url),
           notes: proof.notes,
           submittedAt: proof.submitted_at,
         };
-      })
+      })))
       .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
   } catch (error) {
     console.error('Error fetching pending payment proofs:', error);
@@ -2426,9 +2559,9 @@ export async function getTenantPaymentProofs(tenantId) {
     const proofs = store[COLLECTIONS.PAYMENT_PROOFS] || [];
     const invoices = store[COLLECTIONS.INVOICES] || [];
     
-    return proofs
+    return (await Promise.all(proofs
       .filter((proof) => proof.tenant_id === tenantId)
-      .map((proof) => {
+      .map(async (proof) => {
         const invoice = invoices.find((inv) => inv.id === proof.invoice_id);
         
         return {
@@ -2439,14 +2572,14 @@ export async function getTenantPaymentProofs(tenantId) {
           paymentDate: proof.payment_date,
           paymentMethod: proof.payment_method,
           referenceNo: proof.reference_no,
-          proofImageUrl: proof.proof_image_url,
+          proofImageUrl: await getPaymentProofUrl(proof.proof_image_url),
           notes: proof.notes,
           status: proof.status,
           submittedAt: proof.submitted_at,
           reviewedAt: proof.reviewed_at,
           rejectionReason: proof.rejection_reason,
         };
-      })
+      })))
       .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
   } catch (error) {
     console.error('Error fetching tenant payment proofs:', error);
@@ -2464,41 +2597,37 @@ export async function approvePaymentProof(proofId, reviewerUserId) {
     
     const proof = proofs.find((p) => p.id === proofId);
     if (!proof) throw new Error('Payment proof not found');
-    if (proof.status !== 'pending') throw new Error('Payment proof has already been reviewed');
+    if (proof.status !== 'pending' && proof.status !== 'approved') throw new Error('Payment proof has already been reviewed');
     
     const now = new Date().toISOString();
-    
-    // Update proof status
+    const stableReference = String(proof.reference_no || '').trim() || `PROOF-${proof.id}`;
+    const paymentAlreadyRecorded = (store[COLLECTIONS.PAYMENTS] || []).some(
+      (payment) => payment.invoice_id === proof.invoice_id && payment.reference_no === stableReference
+    );
+
+    // Record first so an invalid payment never leaves the proof marked approved.
+    // The stable reference also makes retries safe if the status update fails.
+    if (!paymentAlreadyRecorded) {
+      await recordPayment({
+        invoiceId: proof.invoice_id,
+        amountPaid: proof.amount,
+        paymentDate: proof.payment_date,
+        paymentMethod: proof.payment_method,
+        referenceNo: stableReference,
+        receivedBy: reviewerUserId,
+      });
+    }
+
     if (isFirebaseConfigured && db) {
       await updateDocument(COLLECTIONS.PAYMENT_PROOFS, proofId, {
         status: 'approved',
         reviewed_at: now,
         reviewed_by_user_id: reviewerUserId,
       });
-      
-      // Record the actual payment
-      await recordPayment({
-        invoiceId: proof.invoice_id,
-        amount: proof.amount,
-        paymentDate: proof.payment_date,
-        paymentMethod: proof.payment_method,
-        referenceNo: proof.reference_no,
-        receivedBy: reviewerUserId,
-      });
     } else {
       proof.status = 'approved';
       proof.reviewed_at = now;
       proof.reviewed_by_user_id = reviewerUserId;
-      
-      // Record the actual payment
-      await recordPayment({
-        invoiceId: proof.invoice_id,
-        amount: proof.amount,
-        paymentDate: proof.payment_date,
-        paymentMethod: proof.payment_method,
-        referenceNo: proof.reference_no,
-        receivedBy: reviewerUserId,
-      });
     }
     
     // Notify tenant

@@ -21,6 +21,7 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
   });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -72,6 +73,9 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
         monthlyRent: rent,
         dueDay: day,
         dueDate,
+        initialPaymentAmount: tenant.initialPaymentAmount,
+        initialPaymentDate: tenant.paymentDate,
+        initialPaymentReference: tenant.paymentReference,
       });
 
       if (Platform.OS === 'web') {
@@ -111,27 +115,16 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
         return;
       }
 
-      const confirmation = `Approve ${tenant.name}?` +
-        `\n\nRoom: ${vacantRooms.find((r) => r.id === selectedRoomId)?.displayNumber}` +
-        `\nMonthly Rent: PHP ${rent.toLocaleString()}` +
-        `\nInitial Payment: PHP ${calculateInitialPayment().toLocaleString()}`;
-
-      // React Native Web's Alert.alert is a no-op. Use browser confirmation on
-      // web, while retaining the native confirmation dialog on mobile.
-      if (Platform.OS === 'web') {
-        if (typeof window !== 'undefined' && !window.confirm(confirmation)) return;
-        await commitApproval(rent, day);
-        return;
-      }
-
-      Alert.alert('Confirm Approval', confirmation, [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Approve', onPress: () => commitApproval(rent, day) },
-      ]);
+      setShowConfirmation(true);
     } catch (err) {
       console.error('Validation error:', err);
       setError('An error occurred. Please try again.');
     }
+  };
+
+  const confirmApproval = async () => {
+    setShowConfirmation(false);
+    await commitApproval(parseFloat(monthlyRent), parseInt(dueDay, 10));
   };
 
   const preferredRoomAvailable = vacantRooms.some((room) => room.id === tenant?.preferredRoomId);
@@ -426,6 +419,82 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
           </View>
         </Pressable>
       </Pressable>
+
+      <Modal
+        visible={showConfirmation}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !submitting && setShowConfirmation(false)}
+      >
+        <Pressable
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.58)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: 24,
+          }}
+          onPress={() => !submitting && setShowConfirmation(false)}
+        >
+          <Pressable
+            onPress={(event) => event.stopPropagation()}
+            style={{
+              width: isMobile ? '100%' : 420,
+              backgroundColor: colors.card,
+              borderRadius: 18,
+              padding: 24,
+              borderWidth: 1,
+              borderColor: colors.cardBorder,
+              elevation: 12,
+              shadowColor: '#000',
+              shadowOpacity: 0.2,
+              shadowRadius: 24,
+              shadowOffset: { width: 0, height: 12 },
+            }}
+          >
+            <View style={{ alignItems: 'center', marginBottom: 18 }}>
+              <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: colors.accentBg, alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+                <Ionicons name="person-add-outline" size={25} color={colors.accent} />
+              </View>
+              <Text style={{ fontSize: fs(20), fontWeight: '800', color: colors.text, textAlign: 'center' }}>Approve tenant?</Text>
+              <Text style={{ fontSize: fs(14), color: colors.textSecondary, textAlign: 'center', marginTop: 6 }}>
+                {tenant.name} will be assigned to the selected room.
+              </Text>
+            </View>
+
+            <View style={{ backgroundColor: colors.bg, borderRadius: 12, padding: 14, gap: 11, marginBottom: 20 }}>
+              {[
+                ['Room', `Room ${vacantRooms.find((room) => room.id === selectedRoomId)?.displayNumber || ''}`],
+                ['Monthly rent', `PHP ${parseFloat(monthlyRent).toLocaleString()}`],
+                ['Initial payment', `PHP ${calculateInitialPayment().toLocaleString()}`],
+                ['Payment due', dueDate],
+              ].map(([label, value]) => (
+                <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
+                  <Text style={{ fontSize: fs(14), color: colors.textSecondary }}>{label}</Text>
+                  <Text style={{ flexShrink: 1, fontSize: fs(14), fontWeight: '700', color: colors.text, textAlign: 'right' }}>{value}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                onPress={() => setShowConfirmation(false)}
+                disabled={submitting}
+                style={{ flex: 1, minHeight: 48, borderRadius: 11, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder, alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Text style={{ fontSize: fs(14), fontWeight: '700', color: colors.text }}>Go back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={confirmApproval}
+                disabled={submitting}
+                style={{ flex: 1.25, minHeight: 48, borderRadius: 11, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' }}
+              >
+                {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ fontSize: fs(14), fontWeight: '700', color: '#fff' }}>Confirm approval</Text>}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </Modal>
   );
 }

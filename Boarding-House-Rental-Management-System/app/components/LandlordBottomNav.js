@@ -4,14 +4,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { isDesktop, fs } from '../utils/responsive';
 import { useTheme } from '../utils/ThemeContext';
 
-export default function LandlordBottomNav({ user, activeScreen, onNavigate, pendingApprovalsCount = 0 }) {
+export default function LandlordBottomNav({ user, activeScreen, onNavigate, pendingApprovalsCount = 0, pendingPaymentProofCount = 0 }) {
   const { colors } = useTheme();
-  const getBadgeCount = (item) => item.id === 'approvals' ? pendingApprovalsCount : 0;
-  const getBadgeDescription = () => 'pending approvals';
+  const getBadgeCount = (item) => {
+    if (item.id === 'approvals') return pendingApprovalsCount;
+    if (item.id === 'finances') return pendingPaymentProofCount;
+    return 0;
+  };
+  const getBadgeDescription = (item) => item.id === 'finances' ? 'payment proofs to review' : 'pending tenant applications';
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'home', iconOutline: 'home-outline' },
-    { id: 'approvals', label: 'Approvals', icon: 'checkmark-done-circle', iconOutline: 'checkmark-done-circle-outline' },
+    { id: 'approvals', label: 'Applications', icon: 'checkmark-done-circle', iconOutline: 'checkmark-done-circle-outline' },
     { id: 'finances', label: 'Finances', icon: 'wallet', iconOutline: 'wallet-outline' },
     { id: 'tenants', label: 'Tenants', icon: 'people', iconOutline: 'people-outline' },
     { id: 'rooms', label: 'Rooms', icon: 'bed', iconOutline: 'bed-outline' },
