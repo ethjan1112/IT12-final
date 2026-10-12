@@ -17,7 +17,6 @@ export default function LandlordBottomNav({ user, activeScreen, onNavigate, pend
     { id: 'dashboard', label: 'Dashboard', icon: 'home', iconOutline: 'home-outline' },
     { id: 'approvals', label: 'Applications', icon: 'checkmark-done-circle', iconOutline: 'checkmark-done-circle-outline' },
     { id: 'finances', label: 'Finances', icon: 'wallet', iconOutline: 'wallet-outline' },
-    { id: 'tenants', label: 'Tenants', icon: 'people', iconOutline: 'people-outline' },
     { id: 'rooms', label: 'Rooms', icon: 'bed', iconOutline: 'bed-outline' },
   ];
 
@@ -160,3 +159,4 @@ export default function LandlordBottomNav({ user, activeScreen, onNavigate, pend
     </View>
   );
 }
+

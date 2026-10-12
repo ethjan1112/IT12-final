@@ -9,7 +9,6 @@ import LandlordHeader from './components/LandlordHeader';
 
 // Import screens
 import LandlordDashboard from './screens/landlord/LandlordDashboard';
-import LandlordTenants from './screens/landlord/LandlordTenants';
 import LandlordRooms from './screens/landlord/LandlordRooms';
 import BillingScreen from './screens/landlord/BillingScreen';
 import IssuesScreen from './screens/landlord/IssuesScreen';
@@ -61,8 +60,6 @@ export default function LandlordApp({ user, onLogout }) {
     switch (activeScreen) {
       case 'dashboard':
         return 'Dashboard';
-      case 'tenants':
-        return 'Tenants';
       case 'rooms':
         return 'Rooms';
       case 'billing':
@@ -113,8 +110,6 @@ export default function LandlordApp({ user, onLogout }) {
     switch (activeScreen) {
       case 'dashboard':
         return <LandlordDashboard />;
-      case 'tenants':
-        return <LandlordTenants />;
       case 'rooms':
         return <LandlordRooms />;
       case 'billing':
@@ -180,6 +175,7 @@ export default function LandlordApp({ user, onLogout }) {
         onLogout={onLogout}
         isDark={isDark}
         onThemeToggle={toggleTheme}
+        user={user}
       />
 
       {isDesktop ? (
@@ -222,3 +218,4 @@ export default function LandlordApp({ user, onLogout }) {
     </View>
   );
 }
+

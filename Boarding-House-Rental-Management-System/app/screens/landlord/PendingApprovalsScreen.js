@@ -161,7 +161,7 @@ export default function PendingApprovalsScreen() {
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
                       <Ionicons name="time-outline" size={14} color={colors.textMuted} />
                       <Text style={{ fontSize: fs(13), color: colors.textMuted }}>
-                        Registered: {formatDate(tenant.registeredAt)}
+                        {tenant.roomSetupUpdatedAt ? `Setup submitted: ${formatDate(tenant.roomSetupUpdatedAt)}` : 'Room & payment setup not submitted'}
                       </Text>
                     </View>
                   </View>

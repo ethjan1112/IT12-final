@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { View, Text, TouchableOpacity, Pressable, Modal, Platform, StatusBar } from 'react-native';
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';

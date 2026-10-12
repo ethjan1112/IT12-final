@@ -760,6 +760,10 @@ export async function getTenantRoomAssignmentRequest(tenantId) {
 }
 
 async function getInitialPaymentProofUrl(path) {
+  if (!path) return '';
+  if (/^(https?:\/\/|data:|file:|content:|blob:)/i.test(path)) {
+    return /^(https?:\/\/|data:)/i.test(path) ? path : '';
+  }
   const { data, error } = await supabase.storage
     .from('initial-payment-proofs')
     .createSignedUrl(path, 60 * 60);
@@ -768,7 +772,10 @@ async function getInitialPaymentProofUrl(path) {
 }
 
 async function getPaymentProofUrl(path) {
-  if (!path || /^https?:\/\//i.test(path) || path.startsWith('data:')) return path || '';
+  if (!path) return '';
+  if (/^(https?:\/\/|data:|file:|content:|blob:)/i.test(path)) {
+    return /^(https?:\/\/|data:)/i.test(path) ? path : '';
+  }
   if (!supabase) return '';
   try {
     const { data, error } = await supabase.storage
@@ -1649,6 +1656,7 @@ export async function getPendingTenantRegistrations() {
           initials: tenant.initials,
           color: tenant.avatar_color,
           registeredAt: tenant.registered_at,
+          roomSetupUpdatedAt: roomRequest?.updated_at || roomRequest?.requested_at || null,
           preferredRoomId: preferredRoom?.id || null,
           preferredRoomNumber: preferredRoom?.room_number || null,
           initialPaymentAmount: roomRequest?.initial_payment_amount || null,
@@ -1659,7 +1667,16 @@ export async function getPendingTenantRegistrations() {
           paymentProofStatus: roomRequest?.payment_proof_status || '',
         };
       })
-      .sort((a, b) => new Date(b.registeredAt) - new Date(a.registeredAt));
+      .sort((a, b) => {
+        const aSetupTime = Date.parse(a.roomSetupUpdatedAt);
+        const bSetupTime = Date.parse(b.roomSetupUpdatedAt);
+        const aHasSetup = Number.isFinite(aSetupTime);
+        const bHasSetup = Number.isFinite(bSetupTime);
+        if (aHasSetup && bHasSetup) return aSetupTime - bSetupTime;
+        if (aHasSetup) return -1;
+        if (bHasSetup) return 1;
+        return (Date.parse(a.registeredAt) || 0) - (Date.parse(b.registeredAt) || 0);
+      });
   } catch (error) {
     console.error('Error fetching pending tenants:', error);
     return [];

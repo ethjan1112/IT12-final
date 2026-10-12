@@ -33,6 +33,7 @@ export default function OwnerDashboard() {
   const [issueStats, setIssueStats] = useState(null);
   const [unpaidTenants, setUnpaidTenants] = useState([]);
   const [selectedPeriod, setSelectedPeriod] = useState(getCurrentPeriod);
+  const [showAllUnpaid, setShowAllUnpaid] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -278,6 +279,18 @@ export default function OwnerDashboard() {
                 }}>
                   Unpaid balances
                 </Text>
+              {unpaidTenants.length > 3 && (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel={showAllUnpaid ? 'Show fewer unpaid balances' : 'See all unpaid balances'}
+                    onPress={() => setShowAllUnpaid((showAll) => !showAll)}
+                    style={{ paddingHorizontal: 10, paddingVertical: 6 }}
+                  >
+                    <Text style={{ color: colors.accent, fontSize: fs(13), fontWeight: '700' }}>
+                      {showAllUnpaid ? 'Show less' : 'See all'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
 
               {unpaidTenants.length === 0 ? (
@@ -285,7 +298,7 @@ export default function OwnerDashboard() {
                   <Ionicons name="checkmark-circle-outline" size={24} color={colors.successText} />
                   <Text style={{ flex: 1, color: colors.textSecondary, fontSize: fs(14), lineHeight: 20 }}>No unpaid balances to follow up right now.</Text>
                 </View>
-              ) : unpaidTenants.map((tenant) => (
+              ) : (showAllUnpaid ? unpaidTenants : unpaidTenants.slice(0, 3)).map((tenant) => (
                 <View
                   key={tenant.id}
                   style={{
