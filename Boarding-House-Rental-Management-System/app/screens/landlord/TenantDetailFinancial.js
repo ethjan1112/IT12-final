@@ -144,26 +144,9 @@ export default function TenantDetailFinancial({ route, navigation }) {
             </View>
           </View>
 
-          {/* Security Deposit & Monthly Rent */}
-          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-            <View style={{ ...cardStyle, backgroundColor: colors.card, borderColor: colors.cardBorder, padding: 16, flex: 1 }}>
-              <Text style={{ fontSize: fs(13), color: colors.textSecondary, marginBottom: 6 }}>Security Deposit</Text>
-              <Text style={{ fontSize: fs(20), fontWeight: '700', color: colors.text }}>
-                ₱{summary.securityDeposit.toLocaleString()}
-              </Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                <Ionicons
-                  name={summary.securityDepositPaid ? 'checkmark-circle' : 'time-outline'}
-                  size={14}
-                  color={summary.securityDepositPaid ? colors.successText : colors.textMuted}
-                />
-                <Text style={{ fontSize: fs(12), color: summary.securityDepositPaid ? colors.successText : colors.textMuted }}>
-                  {summary.securityDepositPaid ? 'Paid' : 'Pending'}
-                </Text>
-              </View>
-            </View>
-
-            <View style={{ ...cardStyle, backgroundColor: colors.card, borderColor: colors.cardBorder, padding: 16, flex: 1 }}>
+          {/* Monthly Rent */}
+          <View>
+            <View style={{ ...cardStyle, backgroundColor: colors.card, borderColor: colors.cardBorder, padding: 16 }}>
               <Text style={{ fontSize: fs(13), color: colors.textSecondary, marginBottom: 6 }}>Monthly Rent</Text>
               <Text style={{ fontSize: fs(20), fontWeight: '700', color: colors.text }}>
                 ₱{summary.monthlyRent.toLocaleString()}

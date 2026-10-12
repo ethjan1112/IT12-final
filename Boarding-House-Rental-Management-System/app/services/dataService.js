@@ -138,12 +138,20 @@ function getInvoiceBalance(invoiceId, store) {
 
     const payments = (store[COLLECTIONS.PAYMENTS] || []).filter((p) => p.invoice_id === invoiceId);
     const totalPaid = payments.reduce((sum, p) => sum + (p.amount_paid || 0), 0);
-    const balance = invoice.total_amount - totalPaid;
+    const balance = getInvoiceTotalAmount(invoice) - totalPaid;
     return Math.max(0, balance);
   } catch (error) {
     console.error('Error computing invoice balance:', error);
     return 0;
   }
+}
+
+// Legacy initial invoices may still contain a security-deposit amount. Treat
+// that amount as removed everywhere the app calculates a tenant's bill.
+function getInvoiceTotalAmount(invoice) {
+  const total = Number(invoice?.total_amount) || 0;
+  if (invoice?.invoice_type !== 'initial') return total;
+  return Math.max(0, total - (Number(invoice.security_deposit) || 0));
 }
 
 function getLatestInvoiceForLease(invoices, leaseId) {
@@ -172,7 +180,7 @@ function toRoomListItem(room, roomTypes, leases = [], tenants = [], invoices = [
       const totalPaid = payments
         .filter((payment) => payment.invoice_id === currentInvoice.id)
         .reduce((sum, payment) => sum + (payment.amount_paid || 0), 0);
-      balance = Math.max(0, currentInvoice.total_amount - totalPaid);
+      balance = Math.max(0, getInvoiceTotalAmount(currentInvoice) - totalPaid);
     }
     status = balance > 0 ? 'balance' : 'paid';
   }
@@ -384,7 +392,7 @@ export async function getRevenue(month = 'september') {
     const payments = store[COLLECTIONS.PAYMENTS] || [];
 
     const septInvoices = invoices.filter((inv) => inv.billing_period === '2026-09');
-    const expected = septInvoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
+    const expected = septInvoices.reduce((sum, inv) => sum + getInvoiceTotalAmount(inv), 0);
 
     const septPayments = payments.filter((p) => {
       const inv = invoices.find((i) => i.id === p.invoice_id);
@@ -630,6 +638,25 @@ export async function getCurrentTenant(id = '2') {
   }
 }
 
+/** Load the editable personal fields for the signed-in tenant. */
+export async function getTenantSettingsProfile(tenantId) {
+  const uid = auth?.currentUser?.uid;
+  const tenants = isFirebaseConfigured && uid
+    ? await readWhere(COLLECTIONS.TENANTS, 'user_id', uid)
+    : (await getStore())[COLLECTIONS.TENANTS] || [];
+  const tenant = tenants.find((item) => item.id === tenantId)
+    || tenants.find((item) => item.user_id === auth?.currentUser?.uid);
+  if (!tenant) throw new Error('Your tenant profile is not available. Please contact the property administrator.');
+
+  return {
+    id: tenant.id,
+    firstName: tenant.first_name || '',
+    lastName: tenant.last_name || '',
+    phone: tenant.phone || '',
+    emergencyContact: tenant.emergency_contact || '',
+  };
+}
+
 /** Return a pending tenant's available initial room options. */
 export async function getAvailableRoomsForInitialAssignment(tenantId) {
   const store = await getStore();
@@ -768,12 +795,12 @@ export async function submitRoomAssignmentRequest({ tenantId, requestedRoomId, p
   const occupiedRoomIds = new Set((store[COLLECTIONS.LEASES] || []).filter((lease) => lease.status === 'active').map((lease) => lease.room_id));
   if (occupiedRoomIds.has(room.id)) throw new Error('That room is already assigned. Choose another room.');
   const roomType = (store[COLLECTIONS.ROOM_TYPES] || []).find((item) => item.id === room.type_id);
-  const expectedAmount = Number(roomType?.base_rent || 0) * 2;
-  if (!paymentProofPath) throw new Error('Attach proof of your one month advance and one month security deposit.');
+  const expectedAmount = Number(roomType?.base_rent || 0);
+  if (!paymentProofPath) throw new Error('Attach proof of your one month advance.');
   if (!paymentDate) throw new Error('Enter the date you paid.');
   if (!Number.isFinite(Number(paymentAmount)) || Number(paymentAmount) <= 0) throw new Error('Enter a valid payment amount.');
   if (expectedAmount > 0 && Number(paymentAmount) !== expectedAmount) {
-    throw new Error(`The amount for this room should be ₱${expectedAmount.toLocaleString()} (one month advance plus one month deposit).`);
+    throw new Error(`The amount for this room should be ₱${expectedAmount.toLocaleString()} (one month advance).`);
   }
 
   const requestId = `assignment-${tenantKey}`;
@@ -854,7 +881,8 @@ export async function getTenantBillingBreakdown(id = '2') {
     if (invoice) {
       const invPayments = payments.filter((p) => p.invoice_id === invoice.id);
       const paidAmount = invPayments.reduce((sum, p) => sum + (p.amount_paid || 0), 0);
-      const outstanding = Math.max(0, invoice.total_amount - paidAmount);
+      const totalDue = getInvoiceTotalAmount(invoice);
+      const outstanding = Math.max(0, totalDue - paidAmount);
       const latestPayment = [...invPayments].sort((a, b) => String(b.payment_date || '').localeCompare(String(a.payment_date || '')))[0];
 
       return {
@@ -863,7 +891,7 @@ export async function getTenantBillingBreakdown(id = '2') {
           : 'Current period',
         monthlyRent: invoice.rent_charge,
         electricity: invoice.utility_charge,
-        securityDeposit: invoice.security_deposit || 0,
+        securityDeposit: 0,
         invoiceType: invoice.invoice_type || 'monthly',
         water: invoice.water_charge || 0,
         additionalCharges: Array.isArray(invoice.additional_charges)
@@ -871,7 +899,7 @@ export async function getTenantBillingBreakdown(id = '2') {
           : Number(invoice.other_charges || 0) > 0
             ? [{ id: 'legacy-other', label: 'Other charges', amount: Number(invoice.other_charges) }]
             : [],
-        totalDue: invoice.total_amount,
+        totalDue,
         dueDate: invoice.due_date,
         paidAmount,
         receiptAmount: latestPayment?.amount_paid || 0,
@@ -1167,7 +1195,7 @@ export async function getRentBilling() {
         const room = rooms.find((r) => r.id === lease.room_id);
         const invoice = getLatestInvoiceForLease(invoices, lease.id);
         const balance = invoice ? getInvoiceBalance(invoice.id, store) : 0;
-        const paidAmount = invoice ? Math.max(0, invoice.total_amount - balance) : 0;
+        const paidAmount = invoice ? Math.max(0, getInvoiceTotalAmount(invoice) - balance) : 0;
         const status = balance === 0 ? 'paid' : paidAmount > 0 ? 'partial' : 'unpaid';
 
         return {
@@ -1177,7 +1205,7 @@ export async function getRentBilling() {
           room: room ? `R${parseInt(room.room_number, 10)}` : 'R?',
           dueDate: invoice ? String(invoice.due_date || '').replace(', 2026', '') : 'Oct 5',
           amount: invoice?.rent_charge ?? lease.agreed_monthly_rent,
-          totalAmount: invoice?.total_amount ?? lease.agreed_monthly_rent,
+          totalAmount: invoice ? getInvoiceTotalAmount(invoice) : lease.agreed_monthly_rent,
           balance,
           status,
           color: tenant.avatar_color || '#8b5cf6',
@@ -1251,7 +1279,7 @@ export async function getUtilityBills() {
         electricity,
         water,
         additionalCharges,
-        total: invoice?.total_amount ?? rent + electricity + water + additionalTotal,
+        total: invoice ? getInvoiceTotalAmount(invoice) : rent + electricity + water + additionalTotal,
         status: invoice?.status || 'unbilled',
         color: tenant?.avatar_color || '#999',
       };
@@ -1326,7 +1354,7 @@ export async function updateUtilityBill({ invoiceId, leaseId, billingPeriod, mon
   const legacyOtherTotal = !Array.isArray(invoice.additional_charges) ? Number(invoice.other_charges || 0) : 0;
   const effectiveCharges = normalizedCharges.length || Array.isArray(invoice.additional_charges) ? normalizedCharges : legacyOtherTotal > 0 ? [{ id: 'legacy-other', label: 'Other charges', amount: legacyOtherTotal }] : [];
   const effectiveAdditionalTotal = effectiveCharges.reduce((sum, charge) => sum + Number(charge.amount || 0), 0);
-  const totalAmount = rentCharge + electricityCharge + waterCharge + (invoice.security_deposit || 0) + effectiveAdditionalTotal;
+  const totalAmount = rentCharge + electricityCharge + waterCharge + effectiveAdditionalTotal;
   const totalPaid = (store[COLLECTIONS.PAYMENTS] || [])
     .filter((payment) => payment.invoice_id === invoiceId)
     .reduce((sum, payment) => sum + Number(payment.amount_paid || 0), 0);
@@ -1335,6 +1363,7 @@ export async function updateUtilityBill({ invoiceId, leaseId, billingPeriod, mon
     rent_charge: rentCharge,
     utility_charge: electricityCharge,
     water_charge: waterCharge,
+    security_deposit: 0,
     additional_charges: effectiveCharges,
     other_charges: effectiveAdditionalTotal,
     total_amount: totalAmount,
@@ -1594,8 +1623,8 @@ export async function getPendingTenantRegistrationCount() {
  * 28. Approve tenant and create lease with initial invoice (Transaction)
  * Creates:
  * - Updates tenant status to 'approved'
- * - Creates new lease with security deposit
- * - Creates initial invoice (advance + deposit)
+ * - Creates a new lease with no security deposit
+ * - Creates an initial invoice for one month advance
  * - Updates room status to 'occupied'
  * - Creates approval notification
  */
@@ -1659,7 +1688,7 @@ export async function approveTenant({ tenantId, roomId, monthlyRent, dueDay, due
       end_date: null,
       agreed_monthly_rent: rent,
       due_day_of_month: effectiveDueDay,
-      security_deposit_amount: rent,
+      security_deposit_amount: 0,
       security_deposit_paid: false,
       status: 'active',
     };
@@ -1868,7 +1897,7 @@ export async function getTenantFinancialSummary(tenantId) {
     const outstandingBalance = tenantInvoices.reduce((sum, inv) => {
       const invPayments = tenantPayments.filter((p) => p.invoice_id === inv.id);
       const paidAmount = invPayments.reduce((s, p) => s + (p.amount_paid || 0), 0);
-      return sum + Math.max(0, inv.total_amount - paidAmount);
+      return sum + Math.max(0, getInvoiceTotalAmount(inv) - paidAmount);
     }, 0);
     
     return {
@@ -1878,8 +1907,6 @@ export async function getTenantFinancialSummary(tenantId) {
       hasLease: true,
       totalCollected,
       outstandingBalance,
-      securityDeposit: activeLease.security_deposit_amount || 0,
-      securityDepositPaid: activeLease.security_deposit_paid || false,
       leaseStart: activeLease.start_date,
       roomNumber: room ? parseInt(room.room_number, 10) : null,
       roomType: roomType ? roomType.name : null,
@@ -1908,7 +1935,7 @@ export async function getNextUnpaidInvoiceForTenant(tenantId) {
     const paid = payments
       .filter((payment) => payment.invoice_id === invoice.id)
       .reduce((sum, payment) => sum + (Number(payment.amount_paid) || 0), 0);
-    const balance = Math.max(0, (Number(invoice.total_amount) || 0) - paid);
+    const balance = Math.max(0, getInvoiceTotalAmount(invoice) - paid);
     if (balance > 0) return { id: invoice.id, balance };
   }
 
@@ -1959,14 +1986,14 @@ export async function getTenantsWithFinancialStatus(filter = 'all') {
           const balance = tenantInvoices.reduce((sum, inv) => {
             const invPayments = tenantPayments.filter((p) => p.invoice_id === inv.id);
             const paidAmount = invPayments.reduce((s, p) => s + (p.amount_paid || 0), 0);
-            return sum + Math.max(0, inv.total_amount - paidAmount);
+            return sum + Math.max(0, getInvoiceTotalAmount(inv) - paidAmount);
           }, 0);
           
           // Find latest unpaid invoice to check if overdue
           const unpaidInvoices = tenantInvoices.filter((inv) => {
             const invPayments = tenantPayments.filter((p) => p.invoice_id === inv.id);
             const paidAmount = invPayments.reduce((s, p) => s + (p.amount_paid || 0), 0);
-            return inv.total_amount > paidAmount;
+            return getInvoiceTotalAmount(inv) > paidAmount;
           });
           
           let isOverdue = false;
@@ -2070,7 +2097,7 @@ export async function getInvoiceWithPayments(invoiceId) {
     
     const invoicePayments = payments.filter((p) => p.invoice_id === invoiceId);
     const totalPaid = invoicePayments.reduce((sum, p) => sum + (p.amount_paid || 0), 0);
-    const balance = Math.max(0, invoice.total_amount - totalPaid);
+    const balance = Math.max(0, getInvoiceTotalAmount(invoice) - totalPaid);
     
     const lease = leases.find((l) => l.id === invoice.lease_id);
     const tenant = lease ? tenants.find((t) => t.id === lease.tenant_id) : null;
@@ -2078,6 +2105,8 @@ export async function getInvoiceWithPayments(invoiceId) {
     
     return {
       ...invoice,
+      security_deposit: 0,
+      total_amount: getInvoiceTotalAmount(invoice),
       tenantName: tenant ? `${tenant.first_name} ${tenant.last_name}` : null,
       roomNumber: room ? parseInt(room.room_number, 10) : null,
       payments: invoicePayments.map((p) => ({
@@ -2125,10 +2154,11 @@ export async function recordPayment({ invoiceId, amountPaid, paymentDate, paymen
     // Calculate new invoice status
     const existingPayments = payments.filter((p) => p.invoice_id === invoiceId);
     const totalPaid = existingPayments.reduce((sum, p) => sum + (p.amount_paid || 0), 0) + amount;
-    const newBalance = Math.max(0, invoice.total_amount - totalPaid);
+    const invoiceTotal = getInvoiceTotalAmount(invoice);
+    const newBalance = Math.max(0, invoiceTotal - totalPaid);
     
     let newStatus = 'unpaid';
-    if (totalPaid >= invoice.total_amount) {
+    if (totalPaid >= invoiceTotal) {
       newStatus = 'paid';
     } else if (totalPaid > 0) {
       newStatus = 'partial';
@@ -2168,13 +2198,12 @@ export async function recordPayment({ invoiceId, amountPaid, paymentDate, paymen
         const batch = writeBatch(db);
         
         batch.set(doc(db, COLLECTIONS.PAYMENTS, paymentId), newPayment);
-        batch.update(doc(db, COLLECTIONS.INVOICES, invoiceId), { status: newStatus });
+        batch.update(doc(db, COLLECTIONS.INVOICES, invoiceId), {
+          status: newStatus,
+          total_amount: invoiceTotal,
+          security_deposit: 0,
+        });
         batch.set(doc(db, COLLECTIONS.TENANT_NOTIFICATIONS, notificationId), notification);
-        
-        // Update security deposit paid status if this is initial invoice
-        if (invoice.invoice_type === 'initial' && newStatus === 'paid') {
-          batch.update(doc(db, COLLECTIONS.LEASES, invoice.lease_id), { security_deposit_paid: true });
-        }
         
         await batch.commit();
       } else {
@@ -2182,17 +2211,17 @@ export async function recordPayment({ invoiceId, amountPaid, paymentDate, paymen
         mockStore[COLLECTIONS.PAYMENTS].push(newPayment);
         
         const mockInvoice = (mockStore[COLLECTIONS.INVOICES] || []).find((inv) => inv.id === invoiceId);
-        if (mockInvoice) mockInvoice.status = newStatus;
+        if (mockInvoice) {
+          mockInvoice.status = newStatus;
+          mockInvoice.total_amount = invoiceTotal;
+          mockInvoice.security_deposit = 0;
+        }
         
         if (!mockStore[COLLECTIONS.TENANT_NOTIFICATIONS]) {
           mockStore[COLLECTIONS.TENANT_NOTIFICATIONS] = [];
         }
         mockStore[COLLECTIONS.TENANT_NOTIFICATIONS].unshift(notification);
         
-        if (invoice.invoice_type === 'initial' && newStatus === 'paid') {
-          const mockLease = (mockStore[COLLECTIONS.LEASES] || []).find((l) => l.id === invoice.lease_id);
-          if (mockLease) mockLease.security_deposit_paid = true;
-        }
       }
     }
     

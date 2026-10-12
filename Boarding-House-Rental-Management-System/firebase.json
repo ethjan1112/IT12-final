@@ -3,5 +3,8 @@
     "database": "(default)",
     "location": "asia-southeast1",
     "rules": "firestore.rules"
+  },
+  "functions": {
+    "source": "functions"
   }
 }

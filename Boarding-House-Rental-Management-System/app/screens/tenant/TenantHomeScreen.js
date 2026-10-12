@@ -373,16 +373,6 @@ export default function TenantHomeScreen({ user, onNavigateToUpdates }) {
                   </Text>
                 </View>
 
-                {billing.securityDeposit > 0 && (
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderTopWidth: 1, borderTopColor: colors.divider }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                      <Ionicons name="shield-checkmark-outline" size={17} color={colors.textMuted} />
-                      <Text style={{ fontSize: fs(14), color: colors.textSecondary, fontWeight: '600' }}>1 Month Security Deposit</Text>
-                    </View>
-                    <Text style={{ fontSize: fs(16), color: colors.text, fontWeight: '700' }}>₱{billing.securityDeposit.toLocaleString()}</Text>
-                  </View>
-                )}
-
                 <View style={{
                   flexDirection: 'row',
                   justifyContent: 'space-between',

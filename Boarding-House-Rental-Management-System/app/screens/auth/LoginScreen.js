@@ -203,6 +203,53 @@ function RecoveryModal({
   );
 }
 
+function PrivacyConsentModal({ visible, onClose, onAgree, onDecline, checked, onToggle, palette }) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.modalBackdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close privacy consent" />
+        <View style={[styles.modalCard, { backgroundColor: palette.surface, borderColor: palette.border, maxHeight: '88%' }]}>
+          <View style={styles.modalTopRow}>
+            <View style={[styles.modalIcon, { backgroundColor: palette.accentSoft }]}>
+              <Ionicons name="shield-checkmark-outline" size={22} color={palette.accent} />
+            </View>
+            <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close">
+              <Ionicons name="close" size={24} color={palette.muted} />
+            </Pressable>
+          </View>
+          <Text style={[styles.modalTitle, { color: palette.text }]}>Data Privacy Consent</Text>
+          <ScrollView style={{ flexGrow: 0, marginBottom: 14 }} showsVerticalScrollIndicator>
+            <Text style={{ color: palette.textSecondary, fontSize: 13, lineHeight: 20 }}>
+              By creating an account, I acknowledge that I have read and understood the Privacy Notice and agree to the collection, processing, storage, and use of my personal information in accordance with Republic Act No. 10173, also known as the Data Privacy Act of 2012, and its Implementing Rules and Regulations.{'\n\n'}
+              I understand that my personal information, including my name, email address, contact number, address, account credentials, and other information required for this application, will be collected and processed for legitimate and specified purposes, including account creation, identity verification, authentication, communication, service delivery, transaction processing, security, and system maintenance.{'\n\n'}
+              I understand that my personal information will be handled with appropriate organizational, physical, and technical security measures and accessed only by authorized persons when necessary for legitimate purposes.{'\n\n'}
+              I acknowledge my right to be informed about the processing of my personal information and, subject to applicable laws and regulations, to access, correct, object to processing, request deletion or blocking, and exercise other rights granted under the Data Privacy Act of 2012.{'\n\n'}
+              I understand that providing the required personal information is necessary to create and maintain my account and access certain application features and services. By checking “I Agree” and creating an account, I freely give my consent to processing for the purposes stated above and confirm that I have read and understood this Privacy Consent.
+            </Text>
+          </ScrollView>
+          <Pressable
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked }}
+            onPress={onToggle}
+            style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: checked ? palette.accent : palette.border, backgroundColor: checked ? palette.accentSoft : palette.input, marginBottom: 14 }}
+          >
+            <View style={[styles.checkbox, { borderColor: checked ? palette.accent : palette.muted, backgroundColor: checked ? palette.accent : 'transparent' }]}>
+              {checked && <Ionicons name="checkmark" size={14} color="#fff" />}
+            </View>
+            <Text style={{ flex: 1, color: palette.textSecondary, fontSize: 12, lineHeight: 18 }}>
+              I have read and agree to the Data Privacy Consent and Privacy Policy.
+            </Text>
+          </Pressable>
+          <AuthPrimaryButton label="I Agree" onPress={onAgree} palette={palette} />
+          <Pressable onPress={onDecline} style={styles.modalCloseButton}>
+            <Text style={[styles.modalCloseText, { color: palette.textSecondary }]}>Decline</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 /* ─── Decorative arcs for the hero ────────────────────────────────────── */
 
 function HeroArcs({ palette, screenWidth }) {
@@ -277,6 +324,8 @@ export default function LoginScreen({ onLoginSuccess }) {
   const [phone, setPhone] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [privacyVisible, setPrivacyVisible] = useState(false);
+  const [privacyChecked, setPrivacyChecked] = useState(false);
 
   const [recoveryVisible, setRecoveryVisible] = useState(false);
   const [recoveryEmail, setRecoveryEmail] = useState('');
@@ -356,7 +405,7 @@ export default function LoginScreen({ onLoginSuccess }) {
 
   const handleRegister = async () => {
     if (!privacyAccepted) {
-      setMessage({ type: 'error', text: 'Access denied. You must agree to the Data Privacy Notice before creating an account.' });
+      setMessage({ type: 'error', text: 'Please review and accept the Data Privacy Consent before creating your account.' });
       return;
     }
     if (!name.trim() || !email.trim() || !password || !confirmPassword) {
@@ -572,9 +621,8 @@ export default function LoginScreen({ onLoginSuccess }) {
                 />
 
                 <TouchableOpacity
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: privacyAccepted }}
-                  onPress={() => { setPrivacyAccepted((accepted) => !accepted); setMessage(null); }}
+                  accessibilityRole="button"
+                  onPress={() => { setPrivacyChecked(false); setPrivacyVisible(true); setMessage(null); }}
                   activeOpacity={0.8}
                   style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 2, marginBottom: 16, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: privacyAccepted ? palette.accent : palette.border, backgroundColor: privacyAccepted ? palette.accentSoft : palette.input }}
                 >
@@ -582,7 +630,7 @@ export default function LoginScreen({ onLoginSuccess }) {
                     {privacyAccepted && <Ionicons name="checkmark" size={14} color="#fff" />}
                   </View>
                   <Text style={{ flex: 1, color: palette.textSecondary, fontSize: 12, lineHeight: 18 }}>
-                    I have read and agree to the Data Privacy Notice.
+                    {privacyAccepted ? 'Data Privacy Consent accepted. Tap to review.' : 'Review and accept the Data Privacy Consent.'}
                   </Text>
                 </TouchableOpacity>
 
@@ -660,6 +708,27 @@ export default function LoginScreen({ onLoginSuccess }) {
         loading={recoveryLoading}
         sent={recoverySent}
         message={recoveryMessage}
+        palette={palette}
+      />
+      <PrivacyConsentModal
+        visible={privacyVisible}
+        onClose={() => setPrivacyVisible(false)}
+        onToggle={() => setPrivacyChecked((value) => !value)}
+        checked={privacyChecked}
+        onAgree={() => {
+          if (!privacyChecked) {
+            setMessage({ type: 'error', text: 'Check the consent box to confirm you have read and agree.' });
+            return;
+          }
+          setPrivacyAccepted(true);
+          setPrivacyVisible(false);
+          setMessage({ type: 'success', text: 'Thank you. Your Data Privacy Consent has been recorded for this signup.' });
+        }}
+        onDecline={() => {
+          setPrivacyAccepted(false);
+          setPrivacyVisible(false);
+          setMessage({ type: 'error', text: 'You declined the Data Privacy Consent. An account cannot be created unless you agree. You may review it again at any time.' });
+        }}
         palette={palette}
       />
     </View>

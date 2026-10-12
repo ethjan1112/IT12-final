@@ -273,6 +273,84 @@ export async function logout() {
   return true;
 }
 
+/** Update tenant profile fields and, when requested, Firebase credentials. */
+export async function updateTenantAccount({
+  tenantId,
+  firstName,
+  lastName,
+  phone = '',
+  emergencyContact = '',
+  currentPassword = '',
+  newPassword = '',
+}) {
+  const fbUser = auth?.currentUser;
+  if (!fbUser || !db) throw new Error('Your session has expired. Sign in again and retry.');
+
+  const cleanFirstName = firstName.trim();
+  const cleanLastName = lastName.trim();
+  const cleanPhone = phone.trim();
+  const cleanEmergencyContact = emergencyContact.trim();
+  const cleanNewPassword = newPassword.trim();
+  if (!cleanFirstName || !cleanLastName) throw new Error('Enter both your first and last name.');
+  if (cleanNewPassword && cleanNewPassword.length < 6) throw new Error('Your new password must have at least 6 characters.');
+  if (cleanNewPassword && !currentPassword) throw new Error('Enter your current password to set a new password.');
+
+  const {
+    EmailAuthProvider,
+    reauthenticateWithCredential,
+    updatePassword,
+    updateProfile,
+  } = await import('firebase/auth');
+  const { collection, doc, query, where, getDocs, writeBatch } = await import('firebase/firestore');
+
+  if (cleanNewPassword) {
+    try {
+      const credential = EmailAuthProvider.credential(fbUser.email, currentPassword);
+      await reauthenticateWithCredential(fbUser, credential);
+    } catch (error) {
+      if (error?.code === 'auth/invalid-credential' || error?.code === 'auth/wrong-password') {
+        throw new Error('Your current password is incorrect.');
+      }
+      throw error;
+    }
+  }
+
+  const tenantQuery = query(collection(db, COLLECTIONS.TENANTS), where('user_id', '==', fbUser.uid));
+  const tenantResults = await getDocs(tenantQuery);
+  const tenantSnapshot = tenantResults.docs.find((snapshot) => snapshot.id === tenantId) || tenantResults.docs[0];
+  if (!tenantSnapshot || tenantSnapshot.data().user_id !== fbUser.uid) {
+    throw new Error('Your tenant profile could not be verified. Contact the property administrator.');
+  }
+
+  const fullName = `${cleanFirstName} ${cleanLastName}`;
+  const initials = `${cleanFirstName[0]}${cleanLastName[0]}`.toUpperCase();
+  const batch = writeBatch(db);
+  batch.update(tenantSnapshot.ref, {
+    first_name: cleanFirstName,
+    last_name: cleanLastName,
+    initials,
+    phone: cleanPhone,
+    emergency_contact: cleanEmergencyContact,
+  });
+  batch.update(doc(db, COLLECTIONS.USERS, fbUser.uid), { name: fullName });
+  await batch.commit();
+
+  try {
+    await updateProfile(fbUser, { displayName: fullName });
+    if (cleanNewPassword) await updatePassword(fbUser, cleanNewPassword);
+  } catch (error) {
+    if (error?.code === 'auth/weak-password') {
+      throw new Error('Your profile was saved, but Firebase rejected the new password. Choose a stronger password and save again.');
+    }
+    if (error?.code === 'auth/requires-recent-login') {
+      throw new Error('Your profile was saved, but your session expired before the password changed. Sign out and back in, then try the password change again.');
+    }
+    throw new Error(`Your profile was saved, but the account update failed: ${error?.message || 'Please try again.'}`);
+  }
+
+  return { uid: fbUser.uid, name: fullName, tenant_id: tenantSnapshot.id };
+}
+
 /**
  * Registers a new user and creates corresponding 3NF database records
  */

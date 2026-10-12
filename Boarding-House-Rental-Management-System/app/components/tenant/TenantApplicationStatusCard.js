@@ -55,7 +55,7 @@ export default function TenantApplicationStatusCard({ tenant, tenantId, refreshK
         ? request.requestedRoomId
         : rooms[0]?.id || '');
       const initialRoom = rooms.find((room) => room.id === (request?.requestedRoomId && rooms.some((room) => room.id === request.requestedRoomId) ? request.requestedRoomId : rooms[0]?.id));
-      setPaymentAmount(request?.initialPaymentAmount?.toString() || (initialRoom ? String(initialRoom.estimatedRent * 2) : ''));
+      setPaymentAmount(initialRoom ? String(initialRoom.estimatedRent) : request?.initialPaymentAmount?.toString() || '');
       setPaymentDate(request?.paymentDate || new Date().toISOString().slice(0, 10));
       setPaymentReference(request?.paymentReference || '');
       setProofImage(request?.paymentProofUrl ? { uri: request.paymentProofUrl, existingPath: request.paymentProofPath } : null);
@@ -94,13 +94,13 @@ export default function TenantApplicationStatusCard({ tenant, tenantId, refreshK
       return;
     }
     const selected = availableRooms.find((room) => room.id === selectedRoomId);
-    const expectedAmount = Number(selected?.estimatedRent || 0) * 2;
+    const expectedAmount = Number(selected?.estimatedRent || 0);
     if (!paymentAmount || Number(paymentAmount) <= 0) {
-      setError('Enter the amount paid for one month advance plus one month deposit.');
+      setError('Enter the amount paid for one month advance.');
       return;
     }
     if (expectedAmount > 0 && Number(paymentAmount) !== expectedAmount) {
-      setError(`The amount for this room should be ₱${expectedAmount.toLocaleString()} (one month advance plus one month deposit).`);
+      setError(`The amount for this room should be ₱${expectedAmount.toLocaleString()} (one month advance).`);
       return;
     }
     if (!paymentDate.trim() || !proofImage?.uri) {
@@ -157,7 +157,7 @@ export default function TenantApplicationStatusCard({ tenant, tenantId, refreshK
         {isPending ? (
           <>
             <Text style={{ color: colors.textSecondary, fontSize: fs(13), lineHeight: 20, marginTop: 10 }}>
-              Choose a room and submit proof of one month advance plus one month security deposit. Staff will review your room request and payment proof.
+              Choose a room and submit proof of one month advance. Staff will review your room request and payment proof.
             </Text>
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
               <View style={{ flex: 1, backgroundColor: colors.bg, borderRadius: 12, padding: 13 }}>
@@ -181,7 +181,7 @@ export default function TenantApplicationStatusCard({ tenant, tenantId, refreshK
                   {request?.initialPaymentAmount ? `₱${Number(request.initialPaymentAmount).toLocaleString()}` : 'Not submitted'}
                 </Text>
                 <Text style={{ color: colors.textSecondary, fontSize: fs(11), marginTop: 3 }} numberOfLines={1}>
-                  1 month advance + 1 month deposit
+                  1 month advance
                 </Text>
               </View>
             </View>
@@ -231,7 +231,7 @@ export default function TenantApplicationStatusCard({ tenant, tenantId, refreshK
               </TouchableOpacity>
             </View>
             <Text style={{ color: colors.textSecondary, fontSize: fs(13), lineHeight: 19, marginBottom: 14 }}>
-              Select a vacant room, then submit your receipt for one month advance plus one month security deposit. Staff will confirm your room and payment. This request does not reserve the room.
+              Select a vacant room, then submit your receipt for one month advance. Staff will confirm your room and payment. This request does not reserve the room.
             </Text>
             {loadingRooms ? (
               <View style={{ paddingVertical: 8, gap: 10 }}>
@@ -248,8 +248,6 @@ export default function TenantApplicationStatusCard({ tenant, tenantId, refreshK
                   <View style={{ backgroundColor: colors.accentBg, padding: 11, borderRadius: 10, marginBottom: 10 }}>
                     <Text style={{ color: colors.text, fontSize: fs(12), fontWeight: '700' }}>1 month advance</Text>
                     <Text style={{ color: colors.textSecondary, fontSize: fs(12), marginBottom: 5 }}>₱{selectedRoom.estimatedRent.toLocaleString()}</Text>
-                    <Text style={{ color: colors.text, fontSize: fs(12), fontWeight: '700' }}>1 month security deposit</Text>
-                    <Text style={{ color: colors.textSecondary, fontSize: fs(12) }}>₱{selectedRoom.estimatedRent.toLocaleString()}</Text>
                   </View>
                 )}
                 {availableRooms.map((room) => {
@@ -257,7 +255,7 @@ export default function TenantApplicationStatusCard({ tenant, tenantId, refreshK
                   return (
                     <TouchableOpacity
                       key={room.id}
-                      onPress={() => { setSelectedRoomId(room.id); setPaymentAmount(String(room.estimatedRent * 2)); setError(''); }}
+                      onPress={() => { setSelectedRoomId(room.id); setPaymentAmount(String(room.estimatedRent)); setError(''); }}
                       accessibilityRole="radio"
                       accessibilityState={{ selected }}
                       style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 13, marginBottom: 8, borderRadius: 11, borderWidth: 1, borderColor: selected ? colors.accent : colors.cardBorder, backgroundColor: selected ? colors.accentBg : colors.bg }}
@@ -272,7 +270,7 @@ export default function TenantApplicationStatusCard({ tenant, tenantId, refreshK
                 })}
                 {availableRooms.length > 0 && (
                   <>
-                <Text style={{ color: colors.text, fontSize: fs(13), fontWeight: '700', marginTop: 12, marginBottom: 6 }}>Initial payment: 1 month advance + 1 month deposit *</Text>
+                <Text style={{ color: colors.text, fontSize: fs(13), fontWeight: '700', marginTop: 12, marginBottom: 6 }}>Initial payment: 1 month advance *</Text>
                 <TextInput value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="decimal-pad" placeholder="Total amount paid" placeholderTextColor={colors.textMuted} style={{ backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 10, padding: 11, color: colors.text, marginBottom: 9 }} />
                 <Text style={{ color: colors.textSecondary, fontSize: fs(12), marginBottom: 6 }}>Payment date *</Text>
                 <TextInput value={paymentDate} onChangeText={setPaymentDate} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textMuted} style={{ backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 10, padding: 11, color: colors.text, marginBottom: 9 }} />

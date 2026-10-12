@@ -248,13 +248,6 @@ export default function TenantFinancesScreen({ user }) {
                 <Text style={{ fontSize: fs(14), fontWeight: '600', color: colors.text }}>₱{billingBreakdown.monthlyRent.toLocaleString()}</Text>
               </View>
 
-              {billingBreakdown.securityDeposit > 0 && (
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={{ fontSize: fs(14), color: colors.textSecondary }}>1 Month Security Deposit</Text>
-                  <Text style={{ fontSize: fs(14), fontWeight: '600', color: colors.text }}>₱{billingBreakdown.securityDeposit.toLocaleString()}</Text>
-                </View>
-              )}
-
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                 <Text style={{ fontSize: fs(14), color: colors.textSecondary }}>Electricity</Text>
                 <Text style={{ fontSize: fs(14), fontWeight: '600', color: colors.text }}>₱{billingBreakdown.electricity.toLocaleString()}</Text>
@@ -433,15 +426,6 @@ export default function TenantFinancesScreen({ user }) {
           )}
         </View>
 
-        {/* Security Deposit Info */}
-        {tenantInfo.outstandingBalance !== undefined && (
-          <View style={{ ...cardStyle, backgroundColor: colors.card, borderColor: colors.cardBorder, padding: 16 }}>
-            <Text style={{ fontSize: fs(14), fontWeight: '700', color: colors.text, marginBottom: 8 }}>Security Deposit</Text>
-            <Text style={{ fontSize: fs(13), color: colors.textSecondary, lineHeight: 20 }}>
-              Your security deposit will be refunded at the end of your lease, minus any deductions for damages or unpaid balances.
-            </Text>
-          </View>
-        )}
       </ScrollView>
     </View>
   );

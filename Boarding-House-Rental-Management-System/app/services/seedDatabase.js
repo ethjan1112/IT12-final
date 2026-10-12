@@ -104,8 +104,8 @@ export const SEED_DATA = {
       end_date: null,
       agreed_monthly_rent: 2500,
       due_day_of_month: 5,
-      security_deposit_amount: 2500,
-      security_deposit_paid: true,
+      security_deposit_amount: 0,
+      security_deposit_paid: false,
       status: 'active',
     },
     {
@@ -116,8 +116,8 @@ export const SEED_DATA = {
       end_date: null,
       agreed_monthly_rent: 3500,
       due_day_of_month: 5,
-      security_deposit_amount: 3500,
-      security_deposit_paid: true,
+      security_deposit_amount: 0,
+      security_deposit_paid: false,
       status: 'active',
     },
   ],
@@ -162,7 +162,7 @@ export const SEED_DATA = {
     },
   ],
 
-  // 8. INVOICES (Including initial invoices with security deposits)
+  // 8. INVOICES (Initial invoices charge one month advance only)
   [COLLECTIONS.INVOICES]: [
     // Tenant 1 - Initial invoice (PAID)
     {
@@ -172,13 +172,13 @@ export const SEED_DATA = {
       invoice_type: 'initial',
       rent_charge: 2500,
       utility_charge: 0,
-      security_deposit: 2500,
+      security_deposit: 0,
       other_charges: 0,
-      total_amount: 5000,
+      total_amount: 2500,
       due_date: 'Sep 05, 2026',
       status: 'paid',
       created_at: '2026-09-01T10:30:00Z',
-      notes: 'Initial payment: 1 month advance + security deposit',
+      notes: 'Initial payment: 1 month advance',
     },
     // Tenant 1 - September monthly invoice (PAID)
     {
@@ -220,13 +220,13 @@ export const SEED_DATA = {
       invoice_type: 'initial',
       rent_charge: 3500,
       utility_charge: 0,
-      security_deposit: 3500,
+      security_deposit: 0,
       other_charges: 0,
-      total_amount: 7000,
+      total_amount: 3500,
       due_date: 'Sep 10, 2026',
       status: 'paid',
       created_at: '2026-09-05T09:15:00Z',
-      notes: 'Initial payment: 1 month advance + security deposit',
+      notes: 'Initial payment: 1 month advance',
     },
     // Tenant 2 - September monthly invoice (PARTIAL)
     {
@@ -268,7 +268,7 @@ export const SEED_DATA = {
     {
       id: 'payment-1',
       invoice_id: 'invoice-1',
-      amount_paid: 5000,
+      amount_paid: 2500,
       payment_date: 'Sep 03, 2026',
       payment_method: 'cash',
       reference_no: 'CASH-20260903-001',
@@ -287,7 +287,7 @@ export const SEED_DATA = {
     {
       id: 'payment-3',
       invoice_id: 'invoice-4',
-      amount_paid: 7000,
+      amount_paid: 3500,
       payment_date: 'Sep 08, 2026',
       payment_method: 'cash',
       reference_no: 'CASH-20260908-001',
@@ -344,7 +344,7 @@ export const SEED_DATA = {
       tenant_id: 'tenant-1',
       type: 'approval',
       title: 'Welcome! Your application was approved',
-      message: 'Your account has been approved. You\'ve been assigned to Room 01. Your initial payment of ₱5,000 (1 month advance + security deposit) is due on Sep 05, 2026.',
+      message: 'Your account has been approved. You\'ve been assigned to Room 01. Your initial payment of ₱2,500 (1 month advance) is due on Sep 05, 2026.',
       read: true,
       created_at: '2026-09-01T10:30:00Z',
       related_invoice_id: 'invoice-1',
@@ -385,7 +385,7 @@ export const SEED_DATA = {
       tenant_id: 'tenant-2',
       type: 'approval',
       title: 'Welcome! Your application was approved',
-      message: 'Your account has been approved. You\'ve been assigned to Room 02. Your initial payment of ₱7,000 (1 month advance + security deposit) is due on Sep 10, 2026.',
+      message: 'Your account has been approved. You\'ve been assigned to Room 02. Your initial payment of ₱3,500 (1 month advance) is due on Sep 10, 2026.',
       read: true,
       created_at: '2026-09-05T09:15:00Z',
       related_invoice_id: 'invoice-4',
