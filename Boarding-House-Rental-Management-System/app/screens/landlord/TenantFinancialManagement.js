@@ -80,10 +80,11 @@ export default function TenantFinancialManagement({ navigation, pendingPaymentPr
   const formatDate = (dateStr) => {
     if (!dateStr) return 'Never';
     try {
-      const date = new Date(dateStr);
+      const date = typeof dateStr.toDate === 'function' ? dateStr.toDate() : new Date(dateStr);
+      if (Number.isNaN(date.getTime())) return 'Never';
       return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     } catch {
-      return dateStr;
+      return 'Never';
     }
   };
 

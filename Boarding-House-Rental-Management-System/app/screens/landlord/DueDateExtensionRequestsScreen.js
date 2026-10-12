@@ -56,7 +56,7 @@ export default function DueDateExtensionRequestsScreen({ onRequestReviewed }) {
       setRequestToReject(null);
       setRejectionReason('');
     } catch (reviewError) {
-      console.error(`Error ${action}ing due-date extension request:`, reviewError);
+      console.error(`Error ${action === 'approve' ? 'approving' : 'rejecting'} due-date extension request:`, reviewError);
       Alert.alert('Could not update request', reviewError.message || `Failed to ${action} the request.`);
     } finally {
       setProcessingId(null);
@@ -169,6 +169,7 @@ export default function DueDateExtensionRequestsScreen({ onRequestReviewed }) {
             </View>
           );
         })}
+
       </ScrollView>
       <Modal
         visible={Boolean(requestToReject)}
@@ -178,7 +179,9 @@ export default function DueDateExtensionRequestsScreen({ onRequestReviewed }) {
       >
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: 24 }}>
           <View style={{ ...cardStyle, backgroundColor: colors.card, borderColor: colors.cardBorder, padding: 22 }}>
-            <Text style={{ color: colors.text, fontSize: fs(18), fontWeight: '800' }}>Reject Extension Request</Text>
+            <Text style={{ color: colors.text, fontSize: fs(18), fontWeight: '800' }}>
+              Reject Extension Request
+            </Text>
             <Text style={{ color: colors.textSecondary, fontSize: fs(14), lineHeight: 20, marginTop: 8 }}>
               Add a reason for {requestToReject?.tenantName}. The tenant will receive it with the rejection notice.
             </Text>
@@ -215,7 +218,9 @@ export default function DueDateExtensionRequestsScreen({ onRequestReviewed }) {
                 style={{ flex: 1, minHeight: 46, backgroundColor: colors.dangerText, borderRadius: 11, flexDirection: 'row', gap: 7, alignItems: 'center', justifyContent: 'center', opacity: processingId ? 0.7 : 1 }}
               >
                 {processingId && <ActivityIndicator size="small" color="#fff" />}
-                <Text style={{ color: '#fff', fontSize: fs(14), fontWeight: '700' }}>Reject Request</Text>
+                <Text style={{ color: '#fff', fontSize: fs(14), fontWeight: '700' }}>
+                  Reject Request
+                </Text>
               </TouchableOpacity>
             </View>
           </View>

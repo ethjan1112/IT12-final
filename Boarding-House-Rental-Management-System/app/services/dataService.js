@@ -160,6 +160,49 @@ function getInvoiceTotalAmount(invoice) {
   return Math.max(0, total - (Number(invoice.security_deposit) || 0));
 }
 
+function getDateTimestamp(dateValue) {
+  if (!dateValue) return null;
+  let date;
+  if (dateValue instanceof Date) {
+    date = dateValue;
+  } else if (typeof dateValue.toDate === 'function') {
+    date = dateValue.toDate();
+  } else if (typeof dateValue.toMillis === 'function') {
+    date = new Date(dateValue.toMillis());
+  } else if (dateValue && typeof dateValue === 'object') {
+    const seconds = Number(dateValue.seconds ?? dateValue._seconds);
+    if (Number.isFinite(seconds)) {
+      date = new Date(seconds * 1000);
+    } else if (typeof dateValue.date === 'string') {
+      date = new Date(dateValue.date);
+    } else {
+      return null;
+    }
+  } else if (typeof dateValue === 'string' && /^\d{10,13}$/.test(dateValue)) {
+    const numericDate = Number(dateValue);
+    date = new Date(dateValue.length === 10 ? numericDate * 1000 : numericDate);
+  } else {
+    date = new Date(dateValue);
+  }
+  const timestamp = date.getTime();
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+function getPaymentDateTimestamp(payment) {
+  for (const dateValue of [
+    payment.payment_date,
+    payment.paymentDate,
+    payment.date,
+    payment.paid_at,
+    payment.paidAt,
+    payment.created_at,
+  ]) {
+    const timestamp = getDateTimestamp(dateValue);
+    if (timestamp !== null) return timestamp;
+  }
+  return null;
+}
+
 function getLatestInvoiceForLease(invoices, leaseId) {
   return invoices
     .filter((invoice) => invoice.lease_id === leaseId)
@@ -2152,7 +2195,7 @@ export async function getTenantFinancialSummary(tenantId) {
     const tenantPayments = payments.filter((p) => 
       tenantInvoices.some((inv) => inv.id === p.invoice_id)
     );
-    
+
     const totalCollected = tenantPayments.reduce((sum, p) => sum + (p.amount_paid || 0), 0);
     const outstandingBalance = tenantInvoices.reduce((sum, inv) => {
       const invPayments = tenantPayments.filter((p) => p.invoice_id === inv.id);
@@ -2227,6 +2270,7 @@ export async function getTenantsWithFinancialStatus(filter = 'all') {
     const rooms = store[COLLECTIONS.ROOMS] || [];
     const invoices = store[COLLECTIONS.INVOICES] || [];
     const payments = store[COLLECTIONS.PAYMENTS] || [];
+    const paymentProofs = store[COLLECTIONS.PAYMENT_PROOFS] || [];
     
     const now = new Date();
     
@@ -2241,6 +2285,10 @@ export async function getTenantsWithFinancialStatus(filter = 'all') {
           const tenantInvoices = invoices.filter((inv) => inv.lease_id === activeLease.id);
           const tenantPayments = payments.filter((p) => 
             tenantInvoices.some((inv) => inv.id === p.invoice_id)
+          );
+          const tenantInvoiceIds = new Set(tenantInvoices.map((invoice) => invoice.id));
+          const verifiedProofs = paymentProofs.filter((proof) =>
+            proof.status === 'approved' && tenantInvoiceIds.has(proof.invoice_id)
           );
           
           const balance = tenantInvoices.reduce((sum, inv) => {
@@ -2264,9 +2312,12 @@ export async function getTenantsWithFinancialStatus(filter = 'all') {
             });
           }
           
-          const lastPayment = tenantPayments.length > 0 
-            ? tenantPayments.sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date))[0]
-            : null;
+          const lastPayment = [
+            ...tenantPayments.map((payment) => getPaymentDateTimestamp(payment)),
+            ...verifiedProofs.map((proof) => getPaymentDateTimestamp(proof)),
+          ]
+            .filter((timestamp) => timestamp !== null)
+            .sort((a, b) => b - a)[0] ?? null;
           
           return {
             id: tenant.id.replace('tenant-', ''),
@@ -2277,7 +2328,7 @@ export async function getTenantsWithFinancialStatus(filter = 'all') {
             roomNumber: room ? parseInt(room.room_number, 10) : null,
             monthlyRent: activeLease.agreed_monthly_rent,
             balance,
-            lastPayment: lastPayment ? lastPayment.payment_date : null,
+            lastPayment: lastPayment === null ? null : new Date(lastPayment).toISOString(),
             isOverdue,
             status: balance === 0 ? 'paid' : (isOverdue ? 'overdue' : 'unpaid'),
           };
@@ -2323,17 +2374,20 @@ export async function getTenantPaymentHistory(tenantId) {
     return tenantPayments
       .map((payment) => {
         const invoice = tenantInvoices.find((inv) => inv.id === payment.invoice_id);
+        const paymentTimestamp = getPaymentDateTimestamp(payment);
         return {
           id: payment.id,
           amount: payment.amount_paid,
-          date: payment.payment_date,
+          date: paymentTimestamp === null
+            ? payment.payment_date
+            : new Date(paymentTimestamp).toISOString(),
           method: payment.payment_method,
           referenceNo: payment.reference_no,
           invoiceId: payment.invoice_id,
           billingPeriod: invoice ? invoice.billing_period : null,
         };
       })
-      .sort((a, b) => new Date(b.date) - new Date(a.date));
+      .sort((a, b) => (getDateTimestamp(b.date) ?? 0) - (getDateTimestamp(a.date) ?? 0));
   } catch (error) {
     console.error('Error fetching payment history:', error);
     return [];

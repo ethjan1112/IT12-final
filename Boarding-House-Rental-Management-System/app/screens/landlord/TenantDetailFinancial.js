@@ -43,10 +43,11 @@ export default function TenantDetailFinancial({ route, navigation }) {
   const formatDate = (dateStr) => {
     if (!dateStr) return '-';
     try {
-      const date = new Date(dateStr);
+      const date = typeof dateStr.toDate === 'function' ? dateStr.toDate() : new Date(dateStr);
+      if (Number.isNaN(date.getTime())) return '-';
       return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     } catch {
-      return dateStr;
+      return '-';
     }
   };
 
