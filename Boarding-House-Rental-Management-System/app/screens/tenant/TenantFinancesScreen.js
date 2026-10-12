@@ -22,12 +22,19 @@ export default function TenantFinancesScreen({ user }) {
   const [paymentProofs, setPaymentProofs] = useState([]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
-  const loadFinancialData = async () => {
+  const tenantId = user?.tenant_id;
+
+  const loadFinancialData = useCallback(async () => {
+    if (!tenantId) {
+      setTenantInfo(null);
+      setError('Your tenant profile is not linked to this account. Please sign in again or contact the property manager.');
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
     try {
       setError(null);
-      
-      // Get tenant ID from user
-      const tenantId = user?.tenant_id || user?.room || '2';
       
       const [info, breakdown, history, proofs] = await Promise.all([
         getCurrentTenant(tenantId),
@@ -47,16 +54,17 @@ export default function TenantFinancesScreen({ user }) {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [tenantId]);
 
   useEffect(() => {
+    setLoading(true);
     loadFinancialData();
-  }, [user]);
+  }, [loadFinancialData]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadFinancialData();
-  }, [user]);
+  }, [loadFinancialData]);
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '-';
@@ -117,7 +125,7 @@ export default function TenantFinancesScreen({ user }) {
     );
   }
 
-  const balance = tenantInfo.outstandingBalance || billingBreakdown?.outstanding || 0;
+  const balance = Number(billingBreakdown?.totalOutstanding ?? tenantInfo.outstandingBalance ?? billingBreakdown?.outstanding ?? 0);
   const isOverdue = balance > 0 && billingBreakdown?.dueDate && new Date(billingBreakdown.dueDate) < new Date();
   
   const currentInvoice = billingBreakdown?.invoiceId ? {
@@ -125,6 +133,7 @@ export default function TenantFinancesScreen({ user }) {
     period: billingBreakdown.month,
     outstanding: billingBreakdown.outstanding,
   } : null;
+  const hasPendingProof = paymentProofs.some((proof) => proof.invoiceId === currentInvoice?.id && proof.status === 'pending');
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -132,7 +141,7 @@ export default function TenantFinancesScreen({ user }) {
         visible={showPaymentModal}
         onClose={() => setShowPaymentModal(false)}
         invoice={currentInvoice}
-        tenantId={user?.tenant_id || user?.room || '2'}
+        tenantId={tenantId}
         onSuccess={loadFinancialData}
       />
       
@@ -191,9 +200,10 @@ export default function TenantFinancesScreen({ user }) {
         {/* Submit Payment Button */}
         {balance > 0 && currentInvoice?.id && (
           <TouchableOpacity
-            onPress={() => setShowPaymentModal(true)}
+            onPress={() => !hasPendingProof && setShowPaymentModal(true)}
+            disabled={hasPendingProof || !currentInvoice?.id}
             style={{
-              backgroundColor: colors.accent,
+              backgroundColor: hasPendingProof ? colors.warningText : colors.accent,
               padding: 16,
               borderRadius: 12,
               flexDirection: 'row',
@@ -203,8 +213,10 @@ export default function TenantFinancesScreen({ user }) {
               marginBottom: spacing.lg,
             }}
           >
-            <Ionicons name="cloud-upload-outline" size={20} color="#ffffff" />
-            <Text style={{ fontSize: fs(16), fontWeight: '700', color: '#ffffff' }}>Submit Payment Proof</Text>
+            <Ionicons name={hasPendingProof ? 'time-outline' : 'cloud-upload-outline'} size={20} color="#ffffff" />
+            <Text style={{ fontSize: fs(16), fontWeight: '700', color: '#ffffff' }}>
+              {hasPendingProof ? 'Payment Proof Pending Review' : 'Submit Payment Proof'}
+            </Text>
           </TouchableOpacity>
         )}
         {balance > 0 && !currentInvoice?.id && (

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Modal, Pressable, TouchableOpacity, ActivityIndicator, TextInput, ScrollView, Alert } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, ActivityIndicator, TextInput, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../utils/ThemeContext';
 import { isMobile, fs } from '../../utils/responsive';
@@ -146,11 +146,8 @@ export default function RecordPaymentModal({ visible, tenant, onClose, onSuccess
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={() => !submitting && onClose()}>
-      <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}
-        onPress={() => !submitting && onClose()}
-      >
-        <Pressable
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+        <View
           style={{
             width: isMobile ? '90%' : 520,
             maxHeight: '85%',
@@ -158,7 +155,6 @@ export default function RecordPaymentModal({ visible, tenant, onClose, onSuccess
             borderRadius: 16,
             padding: 24,
           }}
-          onPress={(e) => e.stopPropagation()}
         >
           {/* Header */}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -420,8 +416,9 @@ export default function RecordPaymentModal({ visible, tenant, onClose, onSuccess
               )}
             </TouchableOpacity>
           </View>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
+

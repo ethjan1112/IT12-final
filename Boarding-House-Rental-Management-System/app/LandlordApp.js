@@ -9,7 +9,6 @@ import LandlordHeader from './components/LandlordHeader';
 
 // Import screens
 import LandlordDashboard from './screens/landlord/LandlordDashboard';
-import LandlordTenants from './screens/landlord/LandlordTenants';
 import LandlordRooms from './screens/landlord/LandlordRooms';
 import BillingScreen from './screens/landlord/BillingScreen';
 import IssuesScreen from './screens/landlord/IssuesScreen';
@@ -23,7 +22,7 @@ import DueDateExtensionRequestsScreen from './screens/landlord/DueDateExtensionR
 
 // Import navigation
 import LandlordBottomNav from './components/LandlordBottomNav';
-import { getPendingDueDateExtensionRequestCount, getPendingTenantRegistrationCount } from './services/dataService';
+import { getPendingDueDateExtensionRequestCount, getPendingPaymentProofCount, getPendingTenantRegistrationCount } from './services/dataService';
 
 export default function LandlordApp({ user, onLogout }) {
   const [activeScreen, setActiveScreen] = useState('dashboard');
@@ -32,26 +31,32 @@ export default function LandlordApp({ user, onLogout }) {
   const [navigationParams, setNavigationParams] = useState(null);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [pendingExtensionRequestsCount, setPendingExtensionRequestsCount] = useState(0);
+  const [pendingPaymentProofCount, setPendingPaymentProofCount] = useState(0);
   const { isDark, toggleTheme, colors } = useTheme();
 
   useEffect(() => {
     let isMounted = true;
+
     const refreshSignupCount = async () => {
       try {
-        const [approvalCount, extensionCount] = await Promise.all([
+        const [approvalCount, extensionCount, paymentProofCount] = await Promise.all([
           getPendingTenantRegistrationCount(),
           getPendingDueDateExtensionRequestCount(),
+          getPendingPaymentProofCount(),
         ]);
         if (isMounted) {
           setPendingApprovalsCount(approvalCount);
           setPendingExtensionRequestsCount(extensionCount);
+          setPendingPaymentProofCount(paymentProofCount);
         }
       } catch (error) {
         console.warn('Could not refresh tenant sign-up badge:', error.message || error);
       }
     };
+
     refreshSignupCount();
     const refreshTimer = setInterval(refreshSignupCount, 30000);
+
     return () => {
       isMounted = false;
       clearInterval(refreshTimer);
@@ -62,12 +67,10 @@ export default function LandlordApp({ user, onLogout }) {
     switch (activeScreen) {
       case 'dashboard':
         return 'Dashboard';
-      case 'tenants':
-        return 'Tenants';
       case 'rooms':
         return 'Rooms';
       case 'billing':
-        return 'Billing';
+        return 'Bills & Utilities';
       case 'issues':
         return 'Issues';
       case 'announcements':
@@ -75,7 +78,7 @@ export default function LandlordApp({ user, onLogout }) {
       case 'reports':
         return 'Reports';
       case 'approvals':
-        return 'Pending Approvals';
+        return 'Tenant Applications';
       case 'finances':
         return 'Tenant Finances';
       case 'tenant-detail':
@@ -116,8 +119,6 @@ export default function LandlordApp({ user, onLogout }) {
     switch (activeScreen) {
       case 'dashboard':
         return <LandlordDashboard />;
-      case 'tenants':
-        return <LandlordTenants />;
       case 'rooms':
         return <LandlordRooms />;
       case 'billing':
@@ -131,11 +132,11 @@ export default function LandlordApp({ user, onLogout }) {
       case 'approvals':
         return <PendingApprovalsScreen />;
       case 'finances':
-        return <TenantFinancialManagement navigation={navigation} />;
+        return <TenantFinancialManagement navigation={navigation} pendingPaymentProofCount={pendingPaymentProofCount} />;
       case 'tenant-detail':
         return <TenantDetailFinancial route={{ params: navigationParams }} navigation={navigation} />;
       case 'payment-proofs':
-        return <PaymentProofReviewScreen />;
+        return <PaymentProofReviewScreen navigation={navigation} reviewerUserId={user?.uid} />;
       case 'due-date-requests':
         return (
           <DueDateExtensionRequestsScreen
@@ -178,7 +179,7 @@ export default function LandlordApp({ user, onLogout }) {
   };
 
   const menuItems = [
-    { id: 'billing', label: 'Billing', icon: 'card', iconOutline: 'card-outline' },
+    { id: 'billing', label: 'Bills & Utilities', icon: 'card', iconOutline: 'card-outline' },
     { id: 'due-date-requests', label: 'Due Date Requests', icon: 'calendar', iconOutline: 'calendar-outline' },
     { id: 'issues', label: 'Issues', icon: 'alert-circle', iconOutline: 'alert-circle-outline' },
     { id: 'announcements', label: 'Announcements', icon: 'megaphone', iconOutline: 'megaphone-outline' },
@@ -196,17 +197,18 @@ export default function LandlordApp({ user, onLogout }) {
         onLogout={onLogout}
         isDark={isDark}
         onThemeToggle={toggleTheme}
+        user={user}
       />
 
       {isDesktop ? (
         <View style={{ flex: 1, flexDirection: 'row' }}>
-          <LandlordBottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} user={user} pendingApprovalsCount={pendingApprovalsCount} />
+          <LandlordBottomNav activeScreen={activeScreen} onNavigate={handleNavigate} user={user} pendingApprovalsCount={pendingApprovalsCount} pendingPaymentProofCount={pendingPaymentProofCount} />
           <View style={{ flex: 1 }}>{renderScreen()}</View>
         </View>
       ) : (
         <>
           <View style={{ flex: 1 }}>{renderScreen()}</View>
-          <LandlordBottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} user={user} pendingApprovalsCount={pendingApprovalsCount} />
+          <LandlordBottomNav activeScreen={activeScreen} onNavigate={handleNavigate} user={user} pendingApprovalsCount={pendingApprovalsCount} pendingPaymentProofCount={pendingPaymentProofCount} />
         </>
       )}
 
@@ -244,3 +246,4 @@ export default function LandlordApp({ user, onLogout }) {
     </View>
   );
 }
+

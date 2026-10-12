@@ -7,7 +7,7 @@ import { isMobile, getResponsivePadding, fs, spacing, cardStyle, safeAreaTop } f
 import { getTenantsWithFinancialStatus } from '../../services/dataService';
 import RecordPaymentModal from '../../components/landlord/RecordPaymentModal';
 
-export default function TenantFinancialManagement({ navigation }) {
+export default function TenantFinancialManagement({ navigation, pendingPaymentProofCount = 0 }) {
   const { colors } = useTheme();
   const padding = getResponsivePadding();
 
@@ -55,7 +55,7 @@ export default function TenantFinancialManagement({ navigation }) {
   };
 
   const handleViewDetails = (tenant) => {
-    navigation.navigate('TenantDetailFinancial', { tenantId: tenant.tenantId });
+    navigation.navigate('tenant-detail', { tenantId: tenant.tenantId });
   };
 
   const handlePaymentSuccess = () => {
@@ -120,6 +120,34 @@ export default function TenantFinancialManagement({ navigation }) {
           <Text style={{ fontSize: fs(15), color: colors.textSecondary, marginTop: 4 }}>
             Manage payments and balances
           </Text>
+        </View>
+
+        <View style={{ ...cardStyle, backgroundColor: colors.card, borderColor: colors.cardBorder, padding: 16, marginBottom: spacing.lg }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={{ width: 44, height: 44, borderRadius: 13, backgroundColor: colors.accentBg, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="receipt-outline" size={22} color={colors.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: fs(15), fontWeight: '700', color: colors.text }}>Payment proof review</Text>
+              <Text style={{ fontSize: fs(13), color: colors.textSecondary, marginTop: 3 }}>
+                {pendingPaymentProofCount > 0
+                  ? `${pendingPaymentProofCount} receipt${pendingPaymentProofCount === 1 ? '' : 's'} waiting for your decision`
+                  : 'Review submitted receipts and payment decisions'}
+              </Text>
+            </View>
+            {pendingPaymentProofCount > 0 && (
+              <View style={{ minWidth: 28, height: 28, paddingHorizontal: 7, borderRadius: 14, backgroundColor: colors.dangerText, alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ color: '#fff', fontSize: fs(12), fontWeight: '800' }}>{pendingPaymentProofCount > 99 ? '99+' : pendingPaymentProofCount}</Text>
+              </View>
+            )}
+          </View>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('payment-proofs')}
+            style={{ marginTop: 14, minHeight: 44, borderRadius: 10, backgroundColor: colors.accent, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+          >
+            <Text style={{ fontSize: fs(14), fontWeight: '700', color: '#fff' }}>Review receipts</Text>
+            <Ionicons name="arrow-forward" size={17} color="#fff" />
+          </TouchableOpacity>
         </View>
 
         {/* Filter Tabs */}

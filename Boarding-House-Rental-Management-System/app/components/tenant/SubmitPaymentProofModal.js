@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Modal, TouchableOpacity, TextInput, ScrollView, Alert, ActivityIndicator, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../../utils/ThemeContext';
 import { fs } from '../../utils/responsive';
-import { submitPaymentProof } from '../../services/dataService';
+import { submitPaymentProof, uploadPaymentProof } from '../../services/dataService';
 
 export default function SubmitPaymentProofModal({ visible, onClose, invoice, tenantId, onSuccess }) {
   const { colors } = useTheme();
@@ -18,13 +18,25 @@ export default function SubmitPaymentProofModal({ visible, onClose, invoice, ten
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    if (visible) {
+      setAmount(invoice?.outstanding?.toString() || '');
+      setPaymentDate(new Date().toISOString().split('T')[0]);
+      setReferenceNo('');
+      setNotes('');
+      setProofImage(null);
+      setError('');
+    }
+  }, [visible, invoice?.id, invoice?.outstanding]);
+
   const handlePickImage = async () => {
     try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (!permissionResult.granted) {
-        Alert.alert('Permission Required', 'Please allow access to your photos to upload payment proof.');
-        return;
+      if (Platform.OS !== 'web') {
+        const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permissionResult.granted) {
+          setError('Please allow photo access to upload your payment receipt.');
+          return;
+        }
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -40,16 +52,15 @@ export default function SubmitPaymentProofModal({ visible, onClose, invoice, ten
       }
     } catch (err) {
       console.error('Error picking image:', err);
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
+      setError('Failed to choose an image. Please try again.');
     }
   };
 
   const handleTakePhoto = async () => {
     try {
       const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      
       if (!permissionResult.granted) {
-        Alert.alert('Permission Required', 'Please allow camera access to take a photo of your payment proof.');
+        setError('Please allow camera access to take a photo of your payment receipt.');
         return;
       }
 
@@ -65,21 +76,8 @@ export default function SubmitPaymentProofModal({ visible, onClose, invoice, ten
       }
     } catch (err) {
       console.error('Error taking photo:', err);
-      Alert.alert('Error', 'Failed to take photo. Please try again.');
+      setError('Failed to take a photo. Please try again.');
     }
-  };
-
-  const handleImageOptions = () => {
-    Alert.alert(
-      'Upload Payment Proof',
-      'Choose an option',
-      [
-        { text: 'Take Photo', onPress: handleTakePhoto },
-        { text: 'Choose from Gallery', onPress: handlePickImage },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-      { cancelable: true }
-    );
   };
 
   const validateForm = () => {
@@ -89,6 +87,14 @@ export default function SubmitPaymentProofModal({ visible, onClose, invoice, ten
     }
     if (!paymentDate) {
       setError('Please enter payment date');
+      return false;
+    }
+    if (!invoice?.id) {
+      setError('There is no invoice available for this payment. Refresh your finances and try again.');
+      return false;
+    }
+    if (Number(amount) > Number(invoice.outstanding || 0)) {
+      setError('The payment amount cannot be greater than the current balance.');
       return false;
     }
     if (!proofImage) {
@@ -105,9 +111,7 @@ export default function SubmitPaymentProofModal({ visible, onClose, invoice, ten
       setSubmitting(true);
       setError('');
 
-      // In a real app, you'd upload the image to cloud storage (Firebase Storage, AWS S3, etc.)
-      // For now, we'll store the local URI (in production, replace with actual upload)
-      const imageUrl = proofImage.uri; // In production: await uploadImageToStorage(proofImage.uri);
+      const imagePath = await uploadPaymentProof({ tenantId, asset: proofImage });
 
       await submitPaymentProof({
         tenantId,
@@ -116,18 +120,18 @@ export default function SubmitPaymentProofModal({ visible, onClose, invoice, ten
         paymentDate,
         paymentMethod,
         referenceNo: referenceNo.trim(),
-        proofImageUrl: imageUrl,
+        proofImageUrl: imagePath,
         notes: notes.trim(),
       });
 
-      Alert.alert(
-        'Success',
-        'Payment proof submitted successfully! The landlord will review and verify your payment.',
-        [{ text: 'OK', onPress: () => {
-          onSuccess?.();
-          handleClose();
-        }}]
-      );
+      await onSuccess?.();
+      if (Platform.OS === 'web') {
+        handleClose();
+      } else {
+        Alert.alert('Submitted', 'Your receipt has been sent for verification.', [
+          { text: 'OK', onPress: handleClose },
+        ]);
+      }
     } catch (err) {
       console.error('Error submitting payment proof:', err);
       setError(err.message || 'Failed to submit payment proof. Please try again.');
@@ -249,24 +253,19 @@ export default function SubmitPaymentProofModal({ visible, onClose, invoice, ten
                   </View>
                 </View>
               ) : (
-                <TouchableOpacity
-                  onPress={handleImageOptions}
-                  style={{
-                    borderWidth: 2,
-                    borderStyle: 'dashed',
-                    borderColor: colors.cardBorder,
-                    borderRadius: 10,
-                    padding: 20,
-                    alignItems: 'center',
-                    backgroundColor: colors.bg,
-                  }}
-                >
-                  <Ionicons name="camera-outline" size={32} color={colors.textMuted} />
-                  <Text style={{ fontSize: fs(14), fontWeight: '600', color: colors.text, marginTop: 8 }}>Upload Cash Receipt Photo</Text>
-                  <Text style={{ fontSize: fs(12), color: colors.textMuted, marginTop: 4, textAlign: 'center' }}>
-                    Take a photo or choose from gallery
-                  </Text>
-                </TouchableOpacity>
+                <View style={{ borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 10, padding: 14, backgroundColor: colors.bg, gap: 10 }}>
+                  <Text style={{ fontSize: fs(13), color: colors.textSecondary, textAlign: 'center' }}>Attach a clear photo of your cash receipt.</Text>
+                  {Platform.OS !== 'web' && (
+                    <TouchableOpacity onPress={handleTakePhoto} style={{ padding: 12, borderRadius: 9, backgroundColor: colors.card, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      <Ionicons name="camera-outline" size={19} color={colors.text} />
+                      <Text style={{ fontSize: fs(14), fontWeight: '600', color: colors.text }}>Take photo</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity onPress={handlePickImage} style={{ padding: 12, borderRadius: 9, backgroundColor: colors.accent, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <Ionicons name="image-outline" size={19} color="#fff" />
+                    <Text style={{ fontSize: fs(14), fontWeight: '600', color: '#fff' }}>Choose receipt photo</Text>
+                  </TouchableOpacity>
+                </View>
               )}
             </View>
 
