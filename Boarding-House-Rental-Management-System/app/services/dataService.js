@@ -10,6 +10,8 @@
 
 import { auth, db, isFirebaseConfigured } from '../utils/firebase.js';
 import { isSupabaseConfigured, supabase } from '../utils/supabase.js';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import { decode } from 'base64-arraybuffer';
 import { COLLECTIONS } from './databaseSchema.js';
 import { getNormalizedMockDatabase, seedFirestoreDatabase } from './seedDatabase.js';
 
@@ -107,7 +109,6 @@ async function getStore() {
     readWhere(COLLECTIONS.LEASES, 'tenant_id', tenant.id),
     readWhere(COLLECTIONS.COMPLAINTS, 'tenant_id', tenant.id),
     readCollection(COLLECTIONS.ANNOUNCEMENTS),
-    readWhere(COLLECTIONS.TENANT_NOTIFICATIONS, 'tenant_id', tenant.id),
     readWhere(COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS, 'tenant_id', tenant.id).catch(() => []),
     readWhere(COLLECTIONS.ROOM_CHANGE_REQUESTS, 'tenant_id', tenant.id).catch(() => []),
     readWhere(COLLECTIONS.PAYMENT_PROOFS, 'tenant_id', tenant.id).catch(() => []),
@@ -126,7 +127,6 @@ async function getStore() {
   tenantStore[COLLECTIONS.PAYMENTS] = payments;
   tenantStore[COLLECTIONS.COMPLAINTS] = complaints;
   tenantStore[COLLECTIONS.ANNOUNCEMENTS] = announcements;
-  tenantStore[COLLECTIONS.TENANT_NOTIFICATIONS] = notifications;
   tenantStore[COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS] = extensionRequests;
   tenantStore[COLLECTIONS.ROOM_CHANGE_REQUESTS] = roomChangeRequests;
   tenantStore[COLLECTIONS.PAYMENT_PROOFS] = paymentProofs;
@@ -791,19 +791,39 @@ async function getPaymentProofUrl(path) {
   }
 }
 
+export async function getPaymentProofPreviewUrl(path) {
+  if (!path) throw new Error('No receipt photo is attached to this payment proof.');
+  if (/^(https?:\/\/|data:)/i.test(path)) return path;
+  if (/^(file:|content:|blob:)/i.test(path)) {
+    throw new Error("This receipt is saved only on the tenant's device. Ask the tenant to upload the receipt photo again.");
+  }
+  if (!supabase) throw new Error('Supabase is not configured, so the private receipt photo cannot be opened.');
+
+  const { data, error } = await supabase.storage
+    .from('initial-payment-proofs')
+    .createSignedUrl(path, 60 * 60);
+  if (error) {
+    console.error('Could not create a payment receipt preview URL:', error);
+    throw new Error(error.message || 'Could not access the receipt photo. Check Supabase storage permissions.');
+  }
+  return data.signedUrl;
+}
+
 /** Resize and upload a receipt image to the private Supabase bucket. */
 export async function uploadInitialPaymentProof({ tenantId, asset }) {
   if (!asset?.uri) throw new Error('Choose a payment proof photo first.');
   if (!supabase) throw new Error('Supabase is not configured. Add its project URL and publishable key to the app environment.');
-  const ImageManipulator = await import('expo-image-manipulator');
-  const image = await ImageManipulator.manipulateAsync(
+  const image = await manipulateAsync(
     asset.uri,
     [{ resize: { width: 1200 } }],
-    { compress: 0.65, format: ImageManipulator.SaveFormat.JPEG }
+    { compress: 0.65, format: SaveFormat.JPEG, base64: true }
   );
-  const response = await fetch(image.uri);
-  if (!response.ok) throw new Error('Could not prepare the selected receipt photo.');
-  const imageBuffer = await response.arrayBuffer();
+  if (!image.base64) throw new Error('Could not encode the selected receipt photo. Please choose another photo.');
+  const imageBuffer = decode(image.base64);
+  const imageBytes = new Uint8Array(imageBuffer);
+  if (imageBytes.length < 3 || imageBytes[0] !== 0xff || imageBytes[1] !== 0xd8 || imageBytes[2] !== 0xff) {
+    throw new Error('The selected receipt photo could not be encoded as a JPEG. Please choose another photo.');
+  }
   const objectPath = `${tenantId}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
   const { error } = await supabase.storage
     .from('initial-payment-proofs')
@@ -2658,6 +2678,7 @@ export async function getPendingPaymentProofs() {
           paymentDate: proof.payment_date,
           paymentMethod: proof.payment_method,
           referenceNo: proof.reference_no,
+          proofImagePath: proof.proof_image_url,
           proofImageUrl: await getPaymentProofUrl(proof.proof_image_url),
           notes: proof.notes,
           submittedAt: proof.submitted_at,
@@ -2692,6 +2713,7 @@ export async function getTenantPaymentProofs(tenantId) {
           paymentDate: proof.payment_date,
           paymentMethod: proof.payment_method,
           referenceNo: proof.reference_no,
+          proofImagePath: proof.proof_image_url,
           proofImageUrl: await getPaymentProofUrl(proof.proof_image_url),
           notes: proof.notes,
           status: proof.status,

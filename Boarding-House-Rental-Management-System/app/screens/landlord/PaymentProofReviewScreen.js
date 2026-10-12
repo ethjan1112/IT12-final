@@ -1,10 +1,10 @@
 import ScreenSkeleton from '../../components/ScreenSkeleton';
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Image, Modal, TextInput, Pressable } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Image, Modal, TextInput, Pressable, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../utils/ThemeContext';
 import { isMobile, isDesktop, getResponsivePadding, fs, spacing, cardStyle, safeAreaTop } from '../../utils/responsive';
-import { getPendingPaymentProofs, approvePaymentProof, rejectPaymentProof } from '../../services/dataService';
+import { getPendingPaymentProofs, getPaymentProofPreviewUrl, approvePaymentProof, rejectPaymentProof } from '../../services/dataService';
 
 export default function PaymentProofReviewScreen({ navigation, reviewerUserId }) {
   const { colors } = useTheme();
@@ -15,6 +15,7 @@ export default function PaymentProofReviewScreen({ navigation, reviewerUserId })
   const [processingId, setProcessingId] = useState(null);
   const [error, setError] = useState(null);
   const [selectedProof, setSelectedProof] = useState(null);
+  const [imagePreviewError, setImagePreviewError] = useState('');
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -41,6 +42,18 @@ export default function PaymentProofReviewScreen({ navigation, reviewerUserId })
   useEffect(() => {
     loadProofs();
   }, []);
+
+  const handleViewProof = async (proof) => {
+    try {
+      setImagePreviewError('');
+      const signedUrl = await getPaymentProofPreviewUrl(proof.proofImagePath || proof.proofImageUrl);
+      setSelectedProof({ ...proof, proofImageUrl: signedUrl });
+      setShowImageModal(true);
+    } catch (previewError) {
+      console.error('Error opening payment proof image:', previewError);
+      Alert.alert('Receipt photo unavailable', previewError.message || 'Could not open the receipt photo.');
+    }
+  };
 
   const handleApprove = (proof) => {
     setError(null);
@@ -273,12 +286,9 @@ export default function PaymentProofReviewScreen({ navigation, reviewerUserId })
                     ) : null}
 
                     {/* Proof Image */}
-                    {proof.proofImageUrl ? (
+                    {proof.proofImagePath || proof.proofImageUrl ? (
                       <TouchableOpacity
-                        onPress={() => {
-                          setSelectedProof(proof);
-                          setShowImageModal(true);
-                        }}
+                        onPress={() => handleViewProof(proof)}
                         style={{
                           backgroundColor: colors.accentBg,
                           padding: 12,
@@ -293,7 +303,11 @@ export default function PaymentProofReviewScreen({ navigation, reviewerUserId })
                         <Text style={{ flex: 1, fontSize: fs(14), fontWeight: '600', color: colors.accent }}>View Payment Proof</Text>
                         <Ionicons name="chevron-forward" size={18} color={colors.accent} />
                       </TouchableOpacity>
-                    ) : null}
+                    ) : (
+                      <Text style={{ color: colors.textMuted, fontSize: fs(13), marginBottom: 14 }}>
+                        No receipt photo is attached to this payment proof.
+                      </Text>
+                    )}
 
                     {/* Submission Time */}
                     <Text style={{ fontSize: fs(12), color: colors.textMuted, marginBottom: 14 }}>
@@ -433,7 +447,19 @@ export default function PaymentProofReviewScreen({ navigation, reviewerUserId })
             <Image
               source={{ uri: selectedProof.proofImageUrl }}
               style={{ width: '90%', height: '70%', resizeMode: 'contain' }}
+              onError={(event) => {
+                const imageError = event?.nativeEvent?.error;
+                console.error('Could not display payment receipt:', imageError || 'Unknown image error');
+                setImagePreviewError(imageError
+                  ? `The receipt photo could not be displayed: ${imageError}`
+                  : 'The receipt photo could not be displayed. Close the preview and try again.');
+              }}
             />
+          ) : null}
+          {imagePreviewError ? (
+            <Text style={{ color: '#fff', fontSize: fs(14), textAlign: 'center', marginHorizontal: 28 }}>
+              {imagePreviewError}
+            </Text>
           ) : null}
         </View>
       </Modal>
@@ -515,4 +541,3 @@ export default function PaymentProofReviewScreen({ navigation, reviewerUserId })
     </View>
   );
 }
-

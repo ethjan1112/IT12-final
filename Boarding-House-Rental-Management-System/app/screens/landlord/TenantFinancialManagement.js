@@ -7,7 +7,7 @@ import { isMobile, getResponsivePadding, fs, spacing, cardStyle, safeAreaTop } f
 import { getTenantsWithFinancialStatus } from '../../services/dataService';
 import RecordPaymentModal from '../../components/landlord/RecordPaymentModal';
 
-export default function TenantFinancialManagement({ navigation, pendingPaymentProofCount = 0 }) {
+export default function TenantFinancialManagement({ navigation, pendingPaymentProofCount = 0, initialFilter = 'all' }) {
   const { colors } = useTheme();
   const padding = getResponsivePadding();
 
@@ -15,7 +15,7 @@ export default function TenantFinancialManagement({ navigation, pendingPaymentPr
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
-  const [activeFilter, setActiveFilter] = useState('all');
+  const [activeFilter, setActiveFilter] = useState(initialFilter);
   
   // Modal states
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
@@ -55,7 +55,7 @@ export default function TenantFinancialManagement({ navigation, pendingPaymentPr
   };
 
   const handleViewDetails = (tenant) => {
-    navigation.navigate('tenant-detail', { tenantId: tenant.tenantId });
+    navigation.navigate('tenant-detail', { tenantId: tenant.tenantId, returnFilter: activeFilter });
   };
 
   const handlePaymentSuccess = () => {
@@ -340,4 +340,3 @@ export default function TenantFinancialManagement({ navigation, pendingPaymentPr
     </View>
   );
 }
-

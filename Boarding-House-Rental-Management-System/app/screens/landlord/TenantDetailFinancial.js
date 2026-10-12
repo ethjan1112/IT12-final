@@ -64,7 +64,10 @@ export default function TenantDetailFinancial({ route, navigation }) {
   if (error || !summary) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, padding: padding }}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginTop: safeAreaTop + 16, marginBottom: 16 }}>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('finances', { filter: route.params?.returnFilter || 'all' })}
+          style={{ marginTop: 16, marginBottom: 16 }}
+        >
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={{ ...cardStyle, backgroundColor: colors.dangerBg, borderColor: colors.dangerText, padding: 24, alignItems: 'center' }}>
@@ -81,10 +84,13 @@ export default function TenantDetailFinancial({ route, navigation }) {
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: padding, paddingTop: isMobile ? safeAreaTop + 16 : 40, paddingBottom: 100 }}
+        contentContainerStyle={{ paddingHorizontal: padding, paddingTop: 16, paddingBottom: 100 }}
       >
         {/* Back Button */}
-        <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginBottom: 16 }}>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('finances', { filter: route.params?.returnFilter || 'all' })}
+          style={{ marginBottom: 16 }}
+        >
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
 
@@ -286,4 +292,3 @@ export default function TenantDetailFinancial({ route, navigation }) {
     </View>
   );
 }
-

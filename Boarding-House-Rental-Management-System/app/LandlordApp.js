@@ -132,7 +132,13 @@ export default function LandlordApp({ user, onLogout }) {
       case 'approvals':
         return <PendingApprovalsScreen />;
       case 'finances':
-        return <TenantFinancialManagement navigation={navigation} pendingPaymentProofCount={pendingPaymentProofCount} />;
+        return (
+          <TenantFinancialManagement
+            navigation={navigation}
+            pendingPaymentProofCount={pendingPaymentProofCount}
+            initialFilter={navigationParams?.filter || 'all'}
+          />
+        );
       case 'tenant-detail':
         return <TenantDetailFinancial route={{ params: navigationParams }} navigation={navigation} />;
       case 'payment-proofs':
@@ -246,4 +252,3 @@ export default function LandlordApp({ user, onLogout }) {
     </View>
   );
 }
-
