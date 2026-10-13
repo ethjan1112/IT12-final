@@ -216,7 +216,7 @@ export default function RecordPaymentModal({ visible, tenant, onClose, onSuccess
           {/* Outstanding Balance Display */}
           <View
             style={{
-              backgroundColor: outstandingBalance > 0 ? colors.dangerBg : colors.successBg,
+              backgroundColor: outstandingBalance > 0 ? colors.infoBg : colors.successBg,
               padding: 12,
               borderRadius: 8,
               marginBottom: 16,
@@ -227,7 +227,7 @@ export default function RecordPaymentModal({ visible, tenant, onClose, onSuccess
               style={{
                 fontSize: fs(24),
                 fontWeight: '700',
-                color: outstandingBalance > 0 ? colors.dangerText : colors.successText,
+                color: outstandingBalance > 0 ? colors.infoText : colors.successText,
               }}
             >
               ₱{outstandingBalance.toLocaleString()}

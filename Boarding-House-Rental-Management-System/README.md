@@ -126,7 +126,6 @@ boarding-house-rental-management-system/
 - View personal dashboard
 - Submit complaints
 - Request room changes
-- Request due date extensions
 - View announcements
 - View billing information
 
@@ -140,7 +139,7 @@ Create staff accounts via Firebase Console:
 
 ## 📊 Database Schema
 
-The application uses a normalized 3NF database with 14 collections:
+The application uses a normalized relational database with collections including:
 
 - `users` - User accounts and roles
 - `staff_profiles` - Owner/Caretaker profiles
@@ -154,7 +153,6 @@ The application uses a normalized 3NF database with 14 collections:
 - `payments` - Payment records
 - `complaints` - Issue tracking
 - `room_change_requests` - Room transfer requests
-- `due_date_extension_requests` - Payment extension requests
 - `announcements` - System notices
 
 See `FIRESTORE_SETUP.md` for detailed schema documentation.
@@ -170,7 +168,6 @@ See `FIRESTORE_SETUP.md` for detailed schema documentation.
 - Complaint system (submit, update status)
 - Announcements (create, view)
 - Room change requests (submit, review)
-- Due date extension requests (submit)
 - Responsive design (mobile, tablet, desktop)
 - Dark mode support
 - Real-time Firestore integration
@@ -179,7 +176,6 @@ See `FIRESTORE_SETUP.md` for detailed schema documentation.
 - Invoice generation interface
 - Payment recording interface
 - Utility meter reading entry
-- Due date extension review
 
 ## 🛠️ Technologies
 

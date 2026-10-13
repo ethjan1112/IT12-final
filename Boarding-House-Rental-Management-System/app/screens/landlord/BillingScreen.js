@@ -1,22 +1,18 @@
 import ScreenSkeleton from '../../components/ScreenSkeleton';
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Modal, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { 
   isMobile, 
-  isTablet, 
   isDesktop, 
   getResponsivePadding, 
   fs, 
   spacing, 
   cardStyle, 
-  cardShadow, 
-  safeAreaTop 
+  cardShadow
 } from '../../utils/responsive';
 import { useTheme } from '../../utils/ThemeContext';
 import {
-  getMonthlyInvoicePreview,
-  generateMonthlyInvoices,
   getRevenue,
   getRentBilling,
   getUtilityBills,
@@ -30,7 +26,7 @@ const getCurrentBillingPeriod = () => {
 
 const formatBillingPeriod = (period) => new Date(`${period}-01T12:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
-export default function BillingScreen({ navigation }) {
+export default function BillingScreen() {
   const { colors } = useTheme();
   const [activeTab, setActiveTab] = useState('rent');
   const [rentBilling, setRentBilling] = useState([]);
@@ -39,16 +35,10 @@ export default function BillingScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [editingBill, setEditingBill] = useState(null);
-  const [editValues, setEditValues] = useState({ monthlyRent: '', electricity: '', water: '' });
+  const [editValues, setEditValues] = useState({ monthlyRent: '', consumedKwh: '', ratePerKwh: '' });
   const [additionalCharges, setAdditionalCharges] = useState([]);
   const [editError, setEditError] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
-  const [invoiceModalVisible, setInvoiceModalVisible] = useState(false);
-  const [invoicePreviewLoading, setInvoicePreviewLoading] = useState(false);
-  const [invoiceGenerating, setInvoiceGenerating] = useState(false);
-  const [invoicePreview, setInvoicePreview] = useState(null);
-  const [invoiceGenerationResult, setInvoiceGenerationResult] = useState(null);
-  const [invoiceGenerationError, setInvoiceGenerationError] = useState('');
 
   const padding = getResponsivePadding();
   const containerMaxWidth = isDesktop ? 1400 : '100%';
@@ -89,42 +79,19 @@ export default function BillingScreen({ navigation }) {
     };
   }, []);
 
-  const openInvoiceGenerator = async () => {
-    setInvoiceModalVisible(true);
-    setInvoicePreviewLoading(true);
-    setInvoicePreview(null);
-    setInvoiceGenerationResult(null);
-    setInvoiceGenerationError('');
-    try {
-      setInvoicePreview(await getMonthlyInvoicePreview(billingPeriod));
-    } catch (previewError) {
-      setInvoiceGenerationError(previewError.message || 'Could not prepare the invoice preview.');
-    } finally {
-      setInvoicePreviewLoading(false);
-    }
-  };
-
-  const handleGenerateMonthlyInvoices = async () => {
-    if (!invoicePreview?.invoices?.length || invoiceGenerating) return;
-    try {
-      setInvoiceGenerating(true);
-      setInvoiceGenerationError('');
-      const result = await generateMonthlyInvoices(billingPeriod);
-      setInvoiceGenerationResult(result);
-      await reloadBillingData();
-    } catch (generateError) {
-      setInvoiceGenerationError(generateError.message || 'Could not generate the monthly invoices.');
-    } finally {
-      setInvoiceGenerating(false);
-    }
-  };
-
   const totalCollected = revenueSummary.collected;
   const totalOutstanding = revenueSummary.outstanding;
+  const consumedKwh = Number(editValues.consumedKwh) || 0;
+  const ratePerKwh = Number(editValues.ratePerKwh) || 0;
+  const calculatedElectricityAmount = Math.round(consumedKwh * ratePerKwh);
 
   const openBillEditor = (bill) => {
     setEditingBill(bill);
-    setEditValues({ monthlyRent: String(bill.rent), electricity: String(bill.electricity), water: String(bill.water) });
+    setEditValues({
+      monthlyRent: String(bill.rent),
+      consumedKwh: bill.hasValidReading ? String(bill.usage) : '',
+      ratePerKwh: String(bill.ratePerKwh ?? 12),
+    });
     setAdditionalCharges((bill.additionalCharges || []).map((charge, index) => ({ id: charge.id || `charge-${index}`, label: charge.label || charge.name || '', amount: String(charge.amount ?? '') })));
     setEditError('');
   };
@@ -139,7 +106,9 @@ export default function BillingScreen({ navigation }) {
         leaseId: editingBill.leaseId,
         billingPeriod: editingBill.billingPeriod,
         additionalCharges,
-        ...editValues,
+        monthlyRent: editValues.monthlyRent,
+        consumedKwh: editValues.consumedKwh,
+        ratePerKwh: editValues.ratePerKwh,
       });
       await reloadBillingData();
       setEditingBill(null);
@@ -175,16 +144,6 @@ export default function BillingScreen({ navigation }) {
           <Text style={{ fontSize: fs(13), color: colors.textMuted, fontWeight: '500' }}>{formatBillingPeriod(billingPeriod)}</Text>
           <View style={{ flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', justifyContent: 'space-between', gap: spacing.sm }}>
             <Text style={{ fontSize: fs(32), color: colors.text, fontWeight: '700', marginTop: 4 }}>Billing</Text>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              accessibilityRole="button"
-              accessibilityLabel={`Preview ${formatBillingPeriod(billingPeriod)} invoices`}
-              onPress={openInvoiceGenerator}
-              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, backgroundColor: colors.accent }}
-            >
-              <Ionicons name="document-text-outline" size={18} color="#fff" />
-              <Text style={{ fontSize: fs(13), fontWeight: '800', color: '#fff' }}>Generate monthly invoices</Text>
-            </TouchableOpacity>
           </View>
 
           {/* Summary Card */}
@@ -267,32 +226,6 @@ export default function BillingScreen({ navigation }) {
               </View>
             </View>
           </View>
-
-          <TouchableOpacity
-            activeOpacity={0.75}
-            onPress={() => navigation?.navigate('payment-proofs')}
-            accessibilityRole="button"
-            accessibilityLabel="Review tenant payment proofs"
-            style={{
-              ...cardStyle,
-              backgroundColor: colors.card,
-              borderColor: colors.cardBorder,
-              padding: 16,
-              marginTop: spacing.md,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 12,
-            }}
-          >
-            <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: colors.accentBg, alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="receipt-outline" size={20} color={colors.accent} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: fs(14), fontWeight: '700', color: colors.text }}>Payment Verification</Text>
-              <Text style={{ fontSize: fs(12), color: colors.textMuted, marginTop: 3 }}>Review tenant payment proofs</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-          </TouchableOpacity>
 
           {/* Toggle Tabs */}
           <View style={{ 
@@ -515,7 +448,6 @@ export default function BillingScreen({ navigation }) {
                     {[
                       ['Rent', item.rent],
                       ['Electricity', item.electricity],
-                      ['Water', item.water],
                     ].map(([label, amount]) => (
                       <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Text style={{ fontSize: fs(13), color: colors.textSecondary }}>{label}</Text>
@@ -611,8 +543,6 @@ export default function BillingScreen({ navigation }) {
 
             {[
               ['monthlyRent', 'Rent'],
-              ['electricity', 'Electricity'],
-              ['water', 'Water'],
             ].map(([field, label]) => (
               <View key={field} style={{ marginBottom: 13 }}>
                 <Text style={{ fontSize: fs(13), fontWeight: '700', color: colors.text, marginBottom: 6 }}>{label} amount (₱)</Text>
@@ -627,6 +557,37 @@ export default function BillingScreen({ navigation }) {
                 />
               </View>
             ))}
+
+            <View style={{ marginBottom: 14 }}>
+              <Text style={{ fontSize: fs(13), fontWeight: '700', color: colors.text, marginBottom: 6 }}>Electricity calculation</Text>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                {[
+                  ['consumedKwh', 'Total kWh consumed', 'kWh'],
+                  ['ratePerKwh', 'Rate per kWh', '₱/kWh'],
+                ].map(([field, label, unit]) => (
+                  <View key={field} style={{ flex: 1 }}>
+                    <Text style={{ fontSize: fs(11), fontWeight: '600', color: colors.textMuted, marginBottom: 5 }}>{label}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 10, paddingHorizontal: 10 }}>
+                      <TextInput
+                        value={editValues[field]}
+                        onChangeText={(value) => setEditValues((current) => ({ ...current, [field]: value }))}
+                        keyboardType="decimal-pad"
+                        placeholder="0"
+                        placeholderTextColor={colors.textMuted}
+                        editable={!savingEdit}
+                        style={{ flex: 1, minWidth: 0, paddingVertical: 11, color: colors.text, fontSize: fs(15) }}
+                      />
+                      <Text style={{ fontSize: fs(11), color: colors.textMuted }}>{unit}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+              <View style={{ marginTop: 8, padding: 10, borderRadius: 9, backgroundColor: colors.accentBg }}>
+                <Text style={{ fontSize: fs(12), color: colors.textSecondary }}>
+                  {consumedKwh.toLocaleString()} kWh × ₱{ratePerKwh.toLocaleString()}/kWh = <Text style={{ fontWeight: '800', color: colors.text }}>₱{calculatedElectricityAmount.toLocaleString()}</Text>
+                </Text>
+              </View>
+            </View>
 
             <View style={{ marginBottom: 14 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -684,133 +645,7 @@ export default function BillingScreen({ navigation }) {
         </View>
       </Modal>
 
-      <Modal
-        visible={invoiceModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => !invoiceGenerating && setInvoiceModalVisible(false)}
-      >
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: 18 }}>
-          <View style={{ width: isMobile ? '90%' : 520, maxHeight: '85%', backgroundColor: colors.card, borderRadius: 16, borderWidth: 1, borderColor: colors.cardBorder, padding: 24 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <Text style={{ fontSize: fs(19), fontWeight: '800', color: colors.text }}>
-                {invoiceGenerationResult ? 'Invoice generation complete' : 'Generate monthly invoices'}
-              </Text>
-              <TouchableOpacity
-                onPress={() => !invoiceGenerating && setInvoiceModalVisible(false)}
-                disabled={invoiceGenerating}
-                accessibilityRole="button"
-                accessibilityLabel="Close invoice generator"
-                style={{ padding: 4 }}
-              >
-                <Ionicons name="close" size={23} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
 
-            <Text style={{ fontSize: fs(13), color: colors.textSecondary, marginBottom: 14 }}>
-              {formatBillingPeriod(billingPeriod)} · one invoice for each active lease
-            </Text>
-
-            {invoicePreviewLoading ? (
-              <View style={{ paddingVertical: 30, alignItems: 'center', gap: 10 }}>
-                <ActivityIndicator size="small" color={colors.accent} />
-                <Text style={{ color: colors.textSecondary, fontSize: fs(13) }}>Preparing invoice preview…</Text>
-              </View>
-            ) : invoiceGenerationResult ? (
-              <View style={{ paddingVertical: 16, alignItems: 'center' }}>
-                <Ionicons name="checkmark-circle" size={42} color={colors.success} />
-                <Text style={{ color: colors.text, fontSize: fs(16), fontWeight: '800', marginTop: 10 }}>
-                  {invoiceGenerationResult.createdCount} invoice{invoiceGenerationResult.createdCount === 1 ? '' : 's'} created
-                </Text>
-                <Text style={{ color: colors.textSecondary, fontSize: fs(14), marginTop: 5 }}>
-                  Total billed: ₱{invoiceGenerationResult.totalAmount.toLocaleString()}
-                </Text>
-                {!!invoiceGenerationResult.alreadyBilled && (
-                  <Text style={{ color: colors.textMuted, fontSize: fs(12), marginTop: 8, textAlign: 'center' }}>
-                    {invoiceGenerationResult.alreadyBilled} active lease{invoiceGenerationResult.alreadyBilled === 1 ? ' already has' : 's already have'} an invoice for this month.
-                  </Text>
-                )}
-              </View>
-            ) : invoicePreview ? (
-              <>
-                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14 }}>
-                  <View style={{ flex: 1, backgroundColor: colors.bg, borderRadius: 12, padding: 13 }}>
-                    <Text style={{ color: colors.textMuted, fontSize: fs(11), fontWeight: '700' }}>NEW INVOICES</Text>
-                    <Text style={{ color: colors.text, fontSize: fs(20), fontWeight: '900', marginTop: 4 }}>{invoicePreview.invoices.length}</Text>
-                  </View>
-                  <View style={{ flex: 1, backgroundColor: colors.bg, borderRadius: 12, padding: 13 }}>
-                    <Text style={{ color: colors.textMuted, fontSize: fs(11), fontWeight: '700' }}>TOTAL TO BILL</Text>
-                    <Text style={{ color: colors.accent, fontSize: fs(20), fontWeight: '900', marginTop: 4 }}>₱{invoicePreview.totalAmount.toLocaleString()}</Text>
-                  </View>
-                </View>
-
-                <Text style={{ color: colors.textSecondary, fontSize: fs(12), marginBottom: 9 }}>
-                  Existing invoices are skipped. Rent and saved electricity readings are included; water and extra charges start at ₱0 and can be edited after generation.
-                </Text>
-                {invoicePreview.missingReadings > 0 && (
-                  <Text style={{ color: colors.warning, fontSize: fs(12), marginBottom: 8 }}>
-                    {invoicePreview.missingReadings} room{invoicePreview.missingReadings === 1 ? ' has' : 's have'} no valid electricity reading, so electricity is ₱0 for those invoices.
-                  </Text>
-                )}
-                {invoicePreview.skippedMissingRent > 0 && (
-                  <Text style={{ color: colors.dangerText, fontSize: fs(12), marginBottom: 8 }}>
-                    {invoicePreview.skippedMissingRent} active lease{invoicePreview.skippedMissingRent === 1 ? ' was' : 's were'} skipped because no monthly rent is configured.
-                  </Text>
-                )}
-                {!!invoicePreview.alreadyBilled && (
-                  <Text style={{ color: colors.textMuted, fontSize: fs(12), marginBottom: 8 }}>
-                    {invoicePreview.alreadyBilled} active lease{invoicePreview.alreadyBilled === 1 ? ' already has' : 's already have'} an invoice for this month and will be skipped.
-                  </Text>
-                )}
-
-                <ScrollView style={{ maxHeight: 220, borderTopWidth: 1, borderTopColor: colors.divider }}>
-                  {invoicePreview.invoices.map((invoice) => (
-                    <View key={invoice.id} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.divider }}>
-                      <View style={{ flex: 1, marginRight: 10 }}>
-                        <Text style={{ color: colors.text, fontSize: fs(13), fontWeight: '700' }}>{invoice.tenantName}</Text>
-                        <Text style={{ color: colors.textMuted, fontSize: fs(12), marginTop: 2 }}>Room {invoice.roomNumber}</Text>
-                      </View>
-                      <Text style={{ color: colors.text, fontSize: fs(13), fontWeight: '800' }}>₱{invoice.total.toLocaleString()}</Text>
-                    </View>
-                  ))}
-                  {invoicePreview.invoices.length === 0 && (
-                    <Text style={{ color: colors.textMuted, fontSize: fs(13), textAlign: 'center', paddingVertical: 22 }}>
-                      No new invoices to generate for this month.
-                    </Text>
-                  )}
-                </ScrollView>
-              </>
-            ) : null}
-
-            {!!invoiceGenerationError && (
-              <Text style={{ color: colors.dangerText, fontSize: fs(13), marginTop: 12 }}>{invoiceGenerationError}</Text>
-            )}
-
-            <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
-              {invoiceGenerationResult ? (
-                <TouchableOpacity onPress={() => setInvoiceModalVisible(false)} style={{ flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: colors.accent }}>
-                  <Text style={{ fontSize: fs(14), fontWeight: '800', color: '#fff' }}>Done</Text>
-                </TouchableOpacity>
-              ) : (
-                <>
-                  <TouchableOpacity onPress={() => setInvoiceModalVisible(false)} disabled={invoiceGenerating} style={{ flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: colors.bg }}>
-                    <Text style={{ fontSize: fs(14), fontWeight: '700', color: colors.text }}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={handleGenerateMonthlyInvoices}
-                    disabled={!invoicePreview?.invoices?.length || invoiceGenerating || invoicePreviewLoading}
-                    style={{ flex: 1.4, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: colors.accent, opacity: !invoicePreview?.invoices?.length || invoiceGenerating ? 0.55 : 1 }}
-                  >
-                    <Text style={{ fontSize: fs(13), fontWeight: '800', color: '#fff' }}>
-                      {invoiceGenerating ? 'Generating…' : `Generate ${invoicePreview?.invoices?.length || 0} invoices`}
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }

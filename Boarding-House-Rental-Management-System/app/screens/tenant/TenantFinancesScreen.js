@@ -270,11 +270,6 @@ export default function TenantFinancesScreen({ user }) {
                 <Text style={{ fontSize: fs(14), fontWeight: '600', color: colors.text }}>₱{billingBreakdown.electricity.toLocaleString()}</Text>
               </View>
 
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Text style={{ fontSize: fs(14), color: colors.textSecondary }}>Water</Text>
-                <Text style={{ fontSize: fs(14), fontWeight: '600', color: colors.text }}>₱{Number(billingBreakdown.water || 0).toLocaleString()}</Text>
-              </View>
-
               {(billingBreakdown.additionalCharges || []).map((charge, index) => (
                 <View key={charge.id || `${charge.label}-${index}`} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   <Text style={{ flex: 1, fontSize: fs(14), color: colors.textSecondary }}>{charge.label || 'Additional charge'}</Text>

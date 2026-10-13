@@ -1,6 +1,7 @@
 import ScreenSkeleton from '../../components/ScreenSkeleton';
+import TenantListPager from '../../components/landlord/TenantListPager';
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
   isMobile,
@@ -17,12 +18,15 @@ import { useTheme } from '../../utils/ThemeContext';
 import { getIssues, updateComplaintStatus } from '../../services/dataService';
 
 export default function IssuesScreen() {
+  const complaintsPerPage = 4;
   const { colors } = useTheme();
   const [filter, setFilter] = useState('All');
+  const [page, setPage] = useState(0);
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
+  const [selectedComplaintId, setSelectedComplaintId] = useState(null);
 
   const padding = getResponsivePadding();
   const containerMaxWidth = isDesktop ? 1400 : '100%';
@@ -67,31 +71,11 @@ export default function IssuesScreen() {
   const inProgressCount = issues.filter((i) => i.status === 'in-progress').length;
   const resolvedCount = issues.filter((i) => i.status === 'resolved').length;
 
-  const statPills = [
-    {
-      statusKey: 'Pending',
-      count: pendingCount,
-      label: 'Pending',
-      bg: colors.warningBg,
-      text: colors.warningText,
-      dot: colors.warning,
-    },
-    {
-      statusKey: 'In Progress',
-      count: inProgressCount,
-      label: 'In Progress',
-      bg: colors.infoBg,
-      text: colors.infoText,
-      dot: colors.info,
-    },
-    {
-      statusKey: 'Resolved',
-      count: resolvedCount,
-      label: 'Resolved',
-      bg: colors.successBg,
-      text: colors.successText,
-      dot: colors.success,
-    },
+  const filterOptions = [
+    { key: 'All', count: issues.length, bg: colors.accent, text: '#ffffff', border: colors.accent },
+    { key: 'Pending', count: pendingCount, bg: colors.warningBg, text: colors.warningText, border: colors.warning },
+    { key: 'In Progress', count: inProgressCount, bg: colors.infoBg, text: colors.infoText, border: colors.info },
+    { key: 'Resolved', count: resolvedCount, bg: colors.successBg, text: colors.successText, border: colors.success },
   ];
 
   const filteredIssues = issues.filter((issue) => {
@@ -101,6 +85,17 @@ export default function IssuesScreen() {
     if (filter === 'Resolved') return issue.status === 'resolved';
     return true;
   });
+  const pageCount = Math.max(1, Math.ceil(filteredIssues.length / complaintsPerPage));
+  const visibleIssues = filteredIssues.slice(page * complaintsPerPage, (page + 1) * complaintsPerPage);
+  const selectedComplaint = issues.find((issue) => issue.complaint_id === selectedComplaintId) || null;
+
+  useEffect(() => {
+    setPage(0);
+  }, [filter]);
+
+  useEffect(() => {
+    if (page >= pageCount) setPage(Math.max(0, pageCount - 1));
+  }, [page, pageCount]);
 
   const getStatusBorderColor = (status) => {
     if (status === 'pending') return colors.warning;
@@ -153,47 +148,6 @@ export default function IssuesScreen() {
             Complaints
           </Text>
 
-          {/* Summary Count Bar */}
-          <View
-            style={{
-              flexDirection: 'row',
-              flexWrap: 'wrap',
-              gap: spacing.sm,
-              marginTop: spacing.md,
-              alignItems: 'center',
-            }}
-          >
-            {statPills.map((stat) => (
-              <TouchableOpacity
-                key={stat.label}
-                activeOpacity={0.7}
-                onPress={() => setFilter(filter === stat.statusKey ? 'All' : stat.statusKey)}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  backgroundColor: stat.bg,
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                  borderRadius: 20,
-                  gap: 6,
-                }}
-              >
-                <View
-                  style={{
-                    width: 7,
-                    height: 7,
-                    borderRadius: 3.5,
-                    backgroundColor: stat.dot,
-                  }}
-                />
-                <Text style={{ fontSize: fs(12), fontWeight: '700', color: stat.text }}>
-                  {stat.count} {stat.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Filter Tabs */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -204,30 +158,33 @@ export default function IssuesScreen() {
               paddingBottom: 4,
             }}
           >
-            {['All', 'Pending', 'In Progress', 'Resolved'].map((tab) => {
-              const isActive = filter === tab;
+            {filterOptions.map((option) => {
+              const isActive = filter === option.key;
               return (
                 <TouchableOpacity
-                  key={tab}
+                  key={option.key}
                   activeOpacity={0.7}
-                  onPress={() => setFilter(tab)}
+                  onPress={() => setFilter(option.key)}
                   style={{
-                    paddingHorizontal: isDesktop ? 22 : 18,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    paddingHorizontal: isDesktop ? 18 : 14,
                     paddingVertical: isDesktop ? 10 : 8,
                     borderRadius: 20,
-                    backgroundColor: isActive ? colors.accent : colors.filterBg,
+                    backgroundColor: isActive ? colors.accent : option.bg,
                     borderWidth: 1,
-                    borderColor: isActive ? colors.accent : colors.filterBorder,
+                    borderColor: isActive ? colors.accent : option.border,
                   }}
                 >
                   <Text
                     style={{
                       fontSize: fs(13),
                       fontWeight: '700',
-                      color: isActive ? '#ffffff' : colors.textSecondary,
+                      color: isActive ? '#ffffff' : option.text,
                     }}
                   >
-                    {tab}
+                    {option.key} ({option.count})
                   </Text>
                 </TouchableOpacity>
               );
@@ -252,7 +209,6 @@ export default function IssuesScreen() {
           <View
             style={{
               flexDirection: 'row',
-              justifyContent: 'space-between',
               alignItems: 'center',
             }}
           >
@@ -267,17 +223,10 @@ export default function IssuesScreen() {
             >
               {filter === 'All' ? 'All Complaints' : `${filter} Complaints`} ({filteredIssues.length})
             </Text>
-            {filter !== 'All' && (
-              <TouchableOpacity activeOpacity={0.7} onPress={() => setFilter('All')}>
-                <Text style={{ fontSize: fs(13), fontWeight: '600', color: colors.accent }}>
-                  View all
-                </Text>
-              </TouchableOpacity>
-            )}
           </View>
 
           {/* Issues List */}
-          {filteredIssues.map((issue) => {
+          {visibleIssues.map((issue) => {
             const statusBadge = getStatusBadge(issue.status);
             const isUpdating = updatingId === issue.complaint_id;
 
@@ -312,7 +261,7 @@ export default function IssuesScreen() {
                     }}
                     numberOfLines={2}
                   >
-                    {issue.title}
+                    <Text style={{ fontWeight: '500', color: colors.warningText }}>Complaint:</Text> {issue.title}
                   </Text>
                   <View
                     style={{
@@ -399,9 +348,9 @@ export default function IssuesScreen() {
                   </View>
                 </View>
 
-                {/* Action Buttons */}
-                {issue.status !== 'resolved' ? (
-                  <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                {/* Complaint Actions */}
+                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                  {issue.status !== 'resolved' ? (
                     <TouchableOpacity
                       activeOpacity={0.7}
                       disabled={isUpdating}
@@ -424,42 +373,29 @@ export default function IssuesScreen() {
                         Mark Resolved
                       </Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      activeOpacity={0.7}
-                      disabled={isUpdating}
-                      onPress={() => {
-                        if (issue.status === 'pending') {
-                          handleUpdateStatus(issue.complaint_id, 'in-progress');
-                        }
-                      }}
-                      style={{
-                        flex: 1,
-                        backgroundColor: colors.card,
-                        borderWidth: 1,
-                        borderColor: colors.cardBorder,
-                        paddingVertical: 14,
-                        borderRadius: 12,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexDirection: 'row',
-                        gap: 6,
-                        minHeight: 46,
-                        opacity: isUpdating ? 0.6 : 1,
-                      }}
-                    >
-                      <Ionicons
-                        name={issue.status === 'pending' ? 'play-outline' : 'checkmark-outline'}
-                        size={18}
-                        color={colors.textSecondary}
-                      />
-                      <Text style={{ fontSize: fs(13), fontWeight: '700', color: colors.textSecondary }}>
-                        {issue.status === 'pending' ? 'In Progress' : 'In Progress'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <View
+                  ) : (
+                    <View style={{
+                      flex: 1,
+                      backgroundColor: colors.successBg,
+                      borderWidth: 1,
+                      borderColor: colors.success,
+                      paddingVertical: 12,
+                      borderRadius: 12,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexDirection: 'row',
+                      gap: 6,
+                    }}>
+                      <Ionicons name="checkmark-done" size={18} color={colors.success} />
+                      <Text style={{ fontSize: fs(13), fontWeight: '700', color: colors.success }}>Resolved</Text>
+                    </View>
+                  )}
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    activeOpacity={0.7}
+                    onPress={() => setSelectedComplaintId(issue.complaint_id)}
                     style={{
+                      flex: 1,
                       backgroundColor: colors.card,
                       borderWidth: 1,
                       borderColor: colors.cardBorder,
@@ -471,12 +407,10 @@ export default function IssuesScreen() {
                       gap: 6,
                     }}
                   >
-                    <Ionicons name="checkmark-done" size={18} color={colors.success} />
-                    <Text style={{ fontSize: fs(13), fontWeight: '700', color: colors.success }}>
-                      Resolved
-                    </Text>
-                  </View>
-                )}
+                    <Ionicons name="eye-outline" size={16} color={colors.textSecondary} />
+                    <Text style={{ fontSize: fs(13), fontWeight: '700', color: colors.textSecondary }}>View details</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             );
           })}
@@ -523,6 +457,113 @@ export default function IssuesScreen() {
           )}
         </View>
       </ScrollView>
+
+      {filteredIssues.length > 0 && (
+        <View style={{
+          backgroundColor: colors.bg,
+          paddingHorizontal: padding,
+          paddingTop: spacing.sm,
+          borderTopWidth: 1,
+          borderTopColor: colors.cardBorder,
+          alignItems: 'center',
+        }}>
+          <View style={{ maxWidth: containerMaxWidth, width: '100%' }}>
+            <TenantListPager
+              page={page}
+              pageSize={complaintsPerPage}
+              totalCount={filteredIssues.length}
+              onPageChange={setPage}
+              colors={colors}
+            />
+          </View>
+        </View>
+      )}
+
+      <Modal
+        visible={Boolean(selectedComplaint)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedComplaintId(null)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: 18 }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close complaint details"
+            onPress={() => setSelectedComplaintId(null)}
+            style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }}
+          />
+          {selectedComplaint && (() => {
+            const detailStatus = getStatusBadge(selectedComplaint.status);
+            const isUpdatingSelected = updatingId === selectedComplaint.complaint_id;
+
+            return (
+              <View style={{ width: '100%', maxWidth: 460, maxHeight: '90%', backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: 1, borderRadius: 20, overflow: 'hidden' }}>
+                <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                    <Text style={{ fontSize: fs(19), fontWeight: '800', color: colors.text }}>Complaint details</Text>
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      accessibilityLabel="Close"
+                      onPress={() => setSelectedComplaintId(null)}
+                      style={{ width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      <Ionicons name="close" size={22} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11, backgroundColor: colors.bg, borderRadius: 13, padding: 12, marginBottom: 14 }}>
+                    <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: selectedComplaint.color, alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ fontSize: fs(13), fontWeight: '800', color: '#ffffff' }}>{selectedComplaint.initials}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: fs(14), fontWeight: '700', color: colors.text }}>{selectedComplaint.tenant}</Text>
+                      <Text style={{ fontSize: fs(12), color: colors.textSecondary, marginTop: 3 }}>{selectedComplaint.room} · {selectedComplaint.date}</Text>
+                    </View>
+                  </View>
+
+                  <Text style={{ fontSize: fs(12), fontWeight: '700', color: colors.textSecondary, marginBottom: 6 }}>Complaint title</Text>
+                  <View style={{ minHeight: 46, justifyContent: 'center', backgroundColor: colors.bg, borderColor: colors.cardBorder, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 14 }}>
+                    <Text style={{ fontSize: fs(14), color: colors.text, lineHeight: 20 }}>{selectedComplaint.title}</Text>
+                  </View>
+
+                  <Text style={{ fontSize: fs(12), fontWeight: '700', color: colors.textSecondary, marginBottom: 6 }}>Details</Text>
+                  <View style={{ minHeight: 96, backgroundColor: colors.bg, borderColor: colors.cardBorder, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 14 }}>
+                    <Text style={{ fontSize: fs(14), color: colors.text, lineHeight: 21 }}>
+                      {selectedComplaint.description?.trim() || 'No additional details provided.'}
+                    </Text>
+                  </View>
+
+                  <Text style={{ fontSize: fs(12), fontWeight: '700', color: colors.textSecondary, marginBottom: 6 }}>Status</Text>
+                  <View style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: detailStatus.bg, borderColor: detailStatus.dot, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, marginBottom: 18 }}>
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: detailStatus.dot }} />
+                    <Text style={{ fontSize: fs(13), fontWeight: '700', color: detailStatus.text, textTransform: 'capitalize' }}>{detailStatus.label}</Text>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      onPress={() => setSelectedComplaintId(null)}
+                      style={{ flex: 1, minHeight: 46, borderRadius: 11, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder, alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      <Text style={{ fontSize: fs(14), fontWeight: '700', color: colors.textSecondary }}>Close</Text>
+                    </TouchableOpacity>
+                    {selectedComplaint.status === 'pending' ? (
+                      <TouchableOpacity
+                        accessibilityRole="button"
+                        disabled={isUpdatingSelected}
+                        onPress={() => handleUpdateStatus(selectedComplaint.complaint_id, 'in-progress')}
+                        style={{ flex: 1, minHeight: 46, borderRadius: 11, backgroundColor: colors.info, alignItems: 'center', justifyContent: 'center', opacity: isUpdatingSelected ? 0.6 : 1 }}
+                      >
+                        {isUpdatingSelected ? <ActivityIndicator size="small" color="#ffffff" /> : <Text style={{ fontSize: fs(14), fontWeight: '800', color: '#ffffff' }}>In Progress</Text>}
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                </ScrollView>
+              </View>
+            );
+          })()}
+        </View>
+      </Modal>
     </View>
   );
 }

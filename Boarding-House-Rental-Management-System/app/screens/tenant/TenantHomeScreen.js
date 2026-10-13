@@ -1,46 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { isMobile, isDesktop, getResponsivePadding, fs, spacing, cardStyle, cardShadow } from '../../utils/responsive';
 import { useTheme } from '../../utils/ThemeContext';
-import { getCurrentTenant, getTenantBillingBreakdown, getAnnouncements, getTenantNotifications, getTenantExtensionRequests, submitDueDateExtensionRequest } from '../../services/dataService';
+import { getCurrentTenant, getTenantBillingBreakdown, getAnnouncements, getTenantNotifications } from '../../services/dataService';
 import AnnouncementDetailsModal from '../../components/AnnouncementDetailsModal';
 import TenantApplicationStatusCard from '../../components/tenant/TenantApplicationStatusCard';
-
-const formatDateKey = (date) => (
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-);
-
-const parseCalendarDate = (value) => {
-  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || '').trim());
-  let year;
-  let month;
-  let day;
-
-  if (isoMatch) {
-    [, year, month, day] = isoMatch;
-    year = Number(year);
-    month = Number(month);
-    day = Number(day);
-  } else {
-    const displayMatch = /^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/.exec(String(value || '').trim());
-    if (!displayMatch) return null;
-    const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
-    const monthName = displayMatch[1].toLowerCase();
-    month = months.findIndex((name) => name === monthName || name.slice(0, 3) === monthName) + 1;
-    day = Number(displayMatch[2]);
-    year = Number(displayMatch[3]);
-  }
-
-  const date = new Date(year, month - 1, day);
-  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
-  return date;
-};
-
-const formatCalendarDate = (value) => {
-  const date = value instanceof Date ? value : parseCalendarDate(value);
-  return date ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
-};
 
 const getAnnouncementTime = (announcement) => {
   const idTime = Number(String(announcement.announcement_id || announcement.id || '').match(/\d{10,}/)?.[0]);
@@ -59,19 +24,10 @@ export default function TenantHomeScreen({ user, onNavigateToNotifications }) {
   const [tenant, setTenant] = useState(null);
   const [billing, setBilling] = useState(null);
   const [latestNotice, setLatestNotice] = useState(null);
-  const [extensionRequests, setExtensionRequests] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
 
   const [showReceiptModal, setShowReceiptModal] = useState(false);
-  const [showExtensionModal, setShowExtensionModal] = useState(false);
-  const [extensionSubmitted, setExtensionSubmitted] = useState(false);
-  const [requestedDueDate, setRequestedDueDate] = useState('');
-  const [extensionReason, setExtensionReason] = useState('');
-  const [calendarVisible, setCalendarVisible] = useState(false);
-  const [calendarMonth, setCalendarMonth] = useState(new Date());
-  const [extensionError, setExtensionError] = useState('');
-  const [extensionSubmitting, setExtensionSubmitting] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -79,12 +35,11 @@ export default function TenantHomeScreen({ user, onNavigateToNotifications }) {
       try {
         setLoading(true);
         setError(null);
-        const [tenantData, billingData, announcementsData, notificationsData, extensionData] = await Promise.all([
+        const [tenantData, billingData, announcementsData, notificationsData] = await Promise.all([
           getCurrentTenant(user?.tenant_id),
           getTenantBillingBreakdown(user?.tenant_id),
           getAnnouncements(),
           getTenantNotifications(user?.tenant_id),
-          getTenantExtensionRequests(user?.tenant_id),
         ]);
         if (isMounted) {
           setTenant(tenantData);
@@ -99,7 +54,6 @@ export default function TenantHomeScreen({ user, onNavigateToNotifications }) {
           const notices = [...(notificationsData || []), ...announcements]
             .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
           setLatestNotice(notices[0] || null);
-          setExtensionRequests(extensionData);
         }
       } catch (err) {
         if (isMounted) {
@@ -117,37 +71,6 @@ export default function TenantHomeScreen({ user, onNavigateToNotifications }) {
       isMounted = false;
     };
   }, [user?.tenant_id, refreshKey]);
-
-  const sendExtensionRequest = async () => {
-    const requestedDate = parseCalendarDate(requestedDueDate);
-    if (!requestedDate) {
-      setExtensionError('Enter a valid requested date, such as Oct 12, 2026.');
-      return;
-    }
-    const currentDueDate = parseCalendarDate(tenant?.dueDate);
-    if (currentDueDate && formatDateKey(requestedDate) <= formatDateKey(currentDueDate)) {
-      setExtensionError('The requested date must be after your current due date.');
-      return;
-    }
-
-    try {
-      setExtensionSubmitting(true);
-      setExtensionError('');
-      const request = await submitDueDateExtensionRequest({
-        tenantId: user?.tenant_id,
-        requestedDueDate: formatCalendarDate(requestedDate),
-        reason: extensionReason,
-      });
-      setExtensionRequests((current) => [request, ...current]);
-      setExtensionSubmitted(true);
-    } catch (submitError) {
-      setExtensionError(submitError.message || 'Could not send your request. Please try again.');
-    } finally {
-      setExtensionSubmitting(false);
-    }
-  };
-
-  const hasPendingExtension = extensionRequests.some((request) => request.status === 'pending');
 
   if (loading) {
     return (
@@ -329,51 +252,6 @@ export default function TenantHomeScreen({ user, onNavigateToNotifications }) {
                     </Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      if (hasPendingExtension) return;
-                      setExtensionSubmitted(false);
-                      setExtensionError('');
-                      setExtensionReason('');
-                      setCalendarVisible(false);
-                      const dueDate = new Date(tenant.dueDate);
-                      setCalendarMonth(Number.isNaN(dueDate.getTime()) ? new Date() : dueDate);
-                      const due = new Date(tenant.dueDate);
-                      if (!Number.isNaN(due.getTime())) {
-                        due.setDate(due.getDate() + 7);
-                        setRequestedDueDate(due.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }));
-                      } else {
-                        setRequestedDueDate('');
-                      }
-                      setShowExtensionModal(true);
-                    }}
-                    style={{
-                      flex: isMobile ? 1 : undefined,
-                      paddingHorizontal: 20,
-                      paddingVertical: 13,
-                      borderRadius: 14,
-                      backgroundColor: colors.heroBarBg,
-                      borderWidth: 1,
-                      borderColor: 'rgba(255, 255, 255, 0.4)',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      minHeight: 48,
-                      pointerEvents: hasPendingExtension ? 'none' : 'auto',
-                      opacity: hasPendingExtension ? 0.65 : 1,
-                      flexDirection: 'row',
-                      gap: 8,
-                    }}
-                  >
-                    <Ionicons name="calendar-outline" size={17} color={colors.heroText} />
-                    <Text style={{
-                      fontSize: fs(14),
-                      fontWeight: '700',
-                      color: colors.heroText,
-                    }}>
-                      {hasPendingExtension ? 'Extension Pending' : 'Request Extension'}
-                    </Text>
-                  </TouchableOpacity>
                 </View>
               </View>
             </View>
@@ -429,23 +307,6 @@ export default function TenantHomeScreen({ user, onNavigateToNotifications }) {
                   </View>
                   <Text style={{ fontSize: fs(16), color: colors.text, fontWeight: '700' }}>
                     ₱{billing.electricity.toLocaleString()}
-                  </Text>
-                </View>
-
-                <View style={{
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  paddingVertical: 14,
-                  borderTopWidth: 1,
-                  borderTopColor: colors.divider,
-                }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <Ionicons name="water-outline" size={17} color={colors.textMuted} />
-                    <Text style={{ fontSize: fs(14), color: colors.textSecondary, fontWeight: '600' }}>Water</Text>
-                  </View>
-                  <Text style={{ fontSize: fs(15), color: colors.textSecondary, fontWeight: '600' }}>
-                    {billing.water}
                   </Text>
                 </View>
 
@@ -601,8 +462,7 @@ export default function TenantHomeScreen({ user, onNavigateToNotifications }) {
             borderRadius: 20,
             borderWidth: 1,
             borderColor: colors.cardBorder,
-            padding: 24,
-            ...cardShadow,
+            padding: 24, ...cardShadow,
           }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -675,175 +535,7 @@ export default function TenantHomeScreen({ user, onNavigateToNotifications }) {
         </View>
       </Modal>
 
-      {/* ── Request Extension Modal ─────────────────── */}
-      <Modal
-        visible={showExtensionModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowExtensionModal(false)}
-      >
-        <View style={{
-          flex: 1,
-          backgroundColor: 'rgba(0,0,0,0.7)',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: 24,
-        }}>
-          <View style={{
-            width: '100%',
-            maxWidth: 420,
-            backgroundColor: colors.card,
-            borderRadius: 20,
-            borderWidth: 1,
-            borderColor: colors.cardBorder,
-            padding: 24,
-            ...cardShadow,
-          }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <Text style={{ fontSize: fs(18), fontWeight: '800', color: colors.text }}>
-                Request Due Date Extension
-              </Text>
-              <TouchableOpacity onPress={() => setShowExtensionModal(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ width: 36, height: 36, borderRadius: 18, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
-                <Ionicons name="close-circle" size={26} color={colors.textMuted} />
-              </TouchableOpacity>
-            </View>
 
-            {extensionSubmitted ? (
-              <View style={{ alignItems: 'center', paddingVertical: 20 }}>
-                <Ionicons name="checkmark-circle" size={54} color={colors.success} />
-                <Text style={{ fontSize: fs(16), fontWeight: '800', color: colors.text, marginTop: 12 }}>
-                  Request Sent!
-                </Text>
-                <Text style={{ fontSize: fs(14), color: colors.textMuted, textAlign: 'center', marginTop: 6 }}>
-                  Your request for {formatCalendarDate(requestedDueDate)} was saved for caretaker review.
-                </Text>
-                <TouchableOpacity
-                  onPress={() => setShowExtensionModal(false)}
-                  style={{
-                    marginTop: 20,
-                    backgroundColor: colors.primary,
-                    paddingHorizontal: 24,
-                    paddingVertical: 13,
-                    borderRadius: 12,
-                    minHeight: 48,
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Text style={{ color: colors.onPrimary, fontWeight: '800', fontSize: fs(14) }}>Done</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <>
-                <Text style={{ fontSize: fs(14), color: colors.textSecondary, marginBottom: 14, lineHeight: 21 }}>
-                  Current balance is <Text style={{ fontWeight: '800', color: colors.text }}>₱{tenant.outstandingBalance.toLocaleString()}</Text> due on <Text style={{ fontWeight: '800', color: colors.text }}>{tenant.dueDate}</Text>. Choose a requested date and add a reason for the caretaker.
-                </Text>
-
-                <Text style={{ fontSize: fs(13), fontWeight: '700', color: colors.textSecondary, marginBottom: 6 }}>Requested due date *</Text>
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  accessibilityLabel="Choose requested due date from calendar"
-                  onPress={() => setCalendarVisible((visible) => !visible)}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.searchBg, borderColor: colors.searchBorder, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, marginBottom: calendarVisible ? 10 : 12 }}
-                >
-                  <Ionicons name="calendar-outline" size={19} color={colors.accent} />
-                  <Text style={{ flex: 1, fontSize: fs(15), color: requestedDueDate ? colors.text : colors.textMuted }}>{formatCalendarDate(requestedDueDate) || 'Select a date'}</Text>
-                  <Ionicons name={calendarVisible ? 'chevron-up' : 'chevron-down'} size={17} color={colors.textMuted} />
-                </TouchableOpacity>
-                {calendarVisible && (() => {
-                  const year = calendarMonth.getFullYear();
-                  const month = calendarMonth.getMonth();
-                  const firstWeekday = new Date(year, month, 1).getDay();
-                  const daysInMonth = new Date(year, month + 1, 0).getDate();
-                  const cells = [...Array(firstWeekday).fill(null), ...Array.from({ length: daysInMonth }, (_, index) => index + 1)];
-                  const dueDateKey = parseCalendarDate(tenant.dueDate) ? formatDateKey(parseCalendarDate(tenant.dueDate)) : null;
-                  return (
-                    <View style={{ padding: 12, marginBottom: 12, borderRadius: 14, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Previous month" onPress={() => setCalendarMonth(new Date(year, month - 1, 1))} style={{ padding: 6 }}>
-                          <Ionicons name="chevron-back" size={19} color={colors.text} />
-                        </TouchableOpacity>
-                        <Text style={{ fontSize: fs(14), fontWeight: '800', color: colors.text }}>{calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</Text>
-                        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Next month" onPress={() => setCalendarMonth(new Date(year, month + 1, 1))} style={{ padding: 6 }}>
-                          <Ionicons name="chevron-forward" size={19} color={colors.text} />
-                        </TouchableOpacity>
-                      </View>
-                      <View style={{ flexDirection: 'row' }}>
-                        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => <Text key={`${day}-${index}`} style={{ flex: 1, textAlign: 'center', color: colors.textMuted, fontSize: fs(11), fontWeight: '700', paddingVertical: 6 }}>{day}</Text>)}
-                      </View>
-                      <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-                        {cells.map((day, index) => {
-                          const dayKey = day ? formatDateKey(new Date(year, month, day)) : null;
-                          const selected = day && requestedDueDate === dayKey;
-                          const chosenDate = day ? new Date(year, month, day) : null;
-                          const disabled = !day || (dueDateKey ? dayKey <= dueDateKey : false);
-                          return (
-                            <TouchableOpacity
-                              key={`day-${index}`}
-                              disabled={disabled}
-                              accessibilityRole={day ? 'button' : undefined}
-                              accessibilityLabel={day ? formatCalendarDate(chosenDate) : undefined}
-                              onPress={() => { setRequestedDueDate(dayKey); setExtensionError(''); setCalendarVisible(false); }}
-                              style={{ width: '14.285%', height: 38, alignItems: 'center', justifyContent: 'center' }}
-                            >
-                              {day ? <Text style={{ width: 32, height: 32, textAlign: 'center', textAlignVertical: 'center', lineHeight: 32, borderRadius: 16, overflow: 'hidden', backgroundColor: selected ? colors.primary : 'transparent', color: selected ? colors.onPrimary : disabled ? colors.textMuted : colors.text, opacity: disabled ? 0.4 : 1, fontSize: fs(13), fontWeight: selected ? '800' : '500' }}>{day}</Text> : null}
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  );
-                })()}
-                <Text style={{ fontSize: fs(13), fontWeight: '700', color: colors.textSecondary, marginBottom: 6 }}>Reason (Optional)</Text>
-                <TextInput
-                  value={extensionReason}
-                  onChangeText={(value) => { setExtensionReason(value); setExtensionError(''); }}
-                  placeholder="Add a short explanation for your request"
-                  placeholderTextColor={colors.textMuted}
-                  multiline
-                  style={{ minHeight: 72, textAlignVertical: 'top', backgroundColor: colors.searchBg, borderColor: colors.searchBorder, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: fs(15), color: colors.text, marginBottom: 12 }}
-                />
-                {!!extensionError && <Text style={{ color: colors.danger, fontSize: fs(13), fontWeight: '600', marginBottom: 12 }}>{extensionError}</Text>}
-
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  <TouchableOpacity
-                    onPress={() => setShowExtensionModal(false)}
-                    style={{
-                      flex: 1,
-                      backgroundColor: colors.bg,
-                      paddingVertical: 14,
-                      borderRadius: 12,
-                      alignItems: 'center',
-                      borderWidth: 1,
-                      borderColor: colors.cardBorder,
-                      minHeight: 48,
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Text style={{ fontSize: fs(15), fontWeight: '700', color: colors.textMuted }}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={extensionSubmitting ? undefined : sendExtensionRequest}
-                    accessibilityState={{ disabled: extensionSubmitting }}
-                    style={{
-                      pointerEvents: extensionSubmitting ? 'none' : 'auto',
-                      flex: 1,
-                      backgroundColor: colors.primary,
-                      paddingVertical: 14,
-                      borderRadius: 12,
-                      alignItems: 'center',
-                      minHeight: 48,
-                      justifyContent: 'center',
-                      opacity: extensionSubmitting ? 0.6 : 1,
-                    }}
-                  >
-                    {extensionSubmitting ? <ActivityIndicator size="small" color={colors.onPrimary} /> : <Text style={{ fontSize: fs(15), fontWeight: '800', color: colors.onPrimary }}>Send Request</Text>}
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }

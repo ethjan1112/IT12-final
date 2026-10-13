@@ -102,14 +102,13 @@ async function getStore() {
   if (!tenant) return Object.fromEntries(collectionNames.map((name) => [name, []]));
 
   const tenantStore = Object.fromEntries(collectionNames.map((name) => [name, []]));
-  const [boardingHouses, roomTypes, rooms, leases, complaints, announcements, extensionRequests, roomChangeRequests, paymentProofs, tenantNotifications] = await Promise.all([
+  const [boardingHouses, roomTypes, rooms, leases, complaints, announcements, roomChangeRequests, paymentProofs, tenantNotifications] = await Promise.all([
     readCollection(COLLECTIONS.BOARDING_HOUSES),
     readCollection(COLLECTIONS.ROOM_TYPES),
     readCollection(COLLECTIONS.ROOMS),
     readWhere(COLLECTIONS.LEASES, 'tenant_id', tenant.id),
     readWhere(COLLECTIONS.COMPLAINTS, 'tenant_id', tenant.id),
     readCollection(COLLECTIONS.ANNOUNCEMENTS),
-    readWhere(COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS, 'tenant_id', tenant.id).catch(() => []),
     readWhere(COLLECTIONS.ROOM_CHANGE_REQUESTS, 'tenant_id', tenant.id).catch(() => []),
     readWhere(COLLECTIONS.PAYMENT_PROOFS, 'tenant_id', tenant.id).catch(() => []),
     readWhere(COLLECTIONS.TENANT_NOTIFICATIONS, 'tenant_id', tenant.id).catch(() => []),
@@ -127,7 +126,6 @@ async function getStore() {
   tenantStore[COLLECTIONS.PAYMENTS] = payments;
   tenantStore[COLLECTIONS.COMPLAINTS] = complaints;
   tenantStore[COLLECTIONS.ANNOUNCEMENTS] = announcements;
-  tenantStore[COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS] = extensionRequests;
   tenantStore[COLLECTIONS.ROOM_CHANGE_REQUESTS] = roomChangeRequests;
   tenantStore[COLLECTIONS.PAYMENT_PROOFS] = paymentProofs;
   tenantStore[COLLECTIONS.TENANT_NOTIFICATIONS] = tenantNotifications;
@@ -152,12 +150,13 @@ function getInvoiceBalance(invoiceId, store) {
   }
 }
 
-// Legacy initial invoices may still contain a security-deposit amount. Treat
-// that amount as removed everywhere the app calculates a tenant's bill.
+// Water is free, so exclude any legacy water charge from invoice totals.
+// Legacy initial invoices may also contain a security-deposit amount.
 function getInvoiceTotalAmount(invoice) {
   const total = Number(invoice?.total_amount) || 0;
-  if (invoice?.invoice_type !== 'initial') return total;
-  return Math.max(0, total - (Number(invoice.security_deposit) || 0));
+  const water = Number(invoice?.water_charge) || 0;
+  const securityDeposit = invoice?.invoice_type === 'initial' ? Number(invoice.security_deposit) || 0 : 0;
+  return Math.max(0, total - water - securityDeposit);
 }
 
 function toMoney(value) {
@@ -1049,7 +1048,7 @@ export async function getTenantBillingBreakdown(id = '2') {
         electricity: invoice.utility_charge,
         securityDeposit: 0,
         invoiceType: invoice.invoice_type || 'monthly',
-        water: invoice.water_charge || 0,
+        water: 0,
         additionalCharges: Array.isArray(invoice.additional_charges)
           ? invoice.additional_charges
           : Number(invoice.other_charges || 0) > 0
@@ -1188,179 +1187,6 @@ export async function submitRoomChangeRequest({ requestedRoomId, reason, tenantI
   };
 }
 /**
- * Tenant due-date extension requests.
- */
-export async function getTenantExtensionRequests(tenantId) {
-  const store = await getStore();
-  const requests = store[COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS] || [];
-  return requests
-    .filter((request) => request.tenant_id === tenantId)
-    .sort((a, b) => (Date.parse(b.requested_at) || 0) - (Date.parse(a.requested_at) || 0))
-    .map((request) => ({
-      id: request.id,
-      currentDueDate: request.current_due_date,
-      requestedDueDate: request.requested_due_date,
-      reason: request.reason,
-      status: request.status,
-      date: request.requested_at,
-    }));
-}
-
-export async function getPendingDueDateExtensionRequests() {
-  const store = await getStore();
-  const requests = store[COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS] || [];
-  const tenants = store[COLLECTIONS.TENANTS] || [];
-  const invoices = store[COLLECTIONS.INVOICES] || [];
-  const leases = store[COLLECTIONS.LEASES] || [];
-  const rooms = store[COLLECTIONS.ROOMS] || [];
-
-  return requests
-    .filter((request) => request.status === 'pending')
-    .map((request) => {
-      const tenant = tenants.find((item) => item.id === request.tenant_id);
-      const invoice = invoices.find((item) => item.id === request.invoice_id);
-      const lease = invoice && leases.find((item) => item.id === invoice.lease_id);
-      const room = lease && rooms.find((item) => item.id === lease.room_id);
-      return {
-        id: request.id,
-        tenantId: request.tenant_id,
-        tenantName: tenant ? `${tenant.first_name} ${tenant.last_name}` : 'Unknown tenant',
-        roomNumber: room?.room_number || '—',
-        invoiceId: request.invoice_id,
-        currentDueDate: request.current_due_date,
-        requestedDueDate: request.requested_due_date,
-        reason: request.reason || '',
-        requestedAt: request.requested_at,
-      };
-    })
-    .sort((first, second) => String(second.requestedAt || '').localeCompare(String(first.requestedAt || '')));
-}
-
-export async function getPendingDueDateExtensionRequestCount() {
-  const store = await getStore();
-  return (store[COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS] || [])
-    .filter((request) => request.status === 'pending').length;
-}
-
-export async function reviewDueDateExtensionRequest({ requestId, decision, reviewedBy, rejectionReason = '' }) {
-  if (!['approved', 'rejected'].includes(decision)) {
-    throw new Error('Choose whether to approve or reject this request.');
-  }
-
-  const store = await getStore();
-  const requests = store[COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS] || [];
-  const request = requests.find((item) => item.id === requestId);
-  if (!request) throw new Error('Due-date extension request not found.');
-  if (request.status !== 'pending') throw new Error('This request has already been reviewed.');
-
-  const updates = {
-    status: decision,
-    reviewed_at: new Date().toISOString(),
-    reviewed_by_user_id: reviewedBy || auth?.currentUser?.uid || null,
-  };
-  if (decision === 'rejected') updates.rejection_reason = String(rejectionReason || '').trim();
-
-  const notificationId = `notif-${Date.now()}`;
-  const notification = {
-    id: notificationId,
-    tenant_id: request.tenant_id,
-    type: decision === 'approved' ? 'due_date_extension_approved' : 'due_date_extension_rejected',
-    title: decision === 'approved' ? 'Due Date Extension Approved' : 'Due Date Extension Rejected',
-    message: decision === 'approved'
-      ? `Your due date extension request was approved. Your new payment due date is ${request.requested_due_date}.`
-      : `Your due date extension request was rejected.${updates.rejection_reason ? ` Reason: ${updates.rejection_reason}` : ''}`,
-    read: false,
-    created_at: updates.reviewed_at,
-    related_invoice_id: request.invoice_id,
-  };
-
-  if (isFirebaseConfigured && db) {
-    const { doc, writeBatch } = await getFirestoreFns();
-    if (decision === 'approved') {
-      const batch = writeBatch(db);
-      batch.update(doc(db, COLLECTIONS.INVOICES, request.invoice_id), {
-        due_date: request.requested_due_date,
-      });
-      batch.update(doc(db, COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS, requestId), updates);
-      batch.set(doc(db, COLLECTIONS.TENANT_NOTIFICATIONS, notificationId), notification);
-      await batch.commit();
-    } else {
-      const batch = writeBatch(db);
-      batch.update(doc(db, COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS, requestId), updates);
-      batch.set(doc(db, COLLECTIONS.TENANT_NOTIFICATIONS, notificationId), notification);
-      await batch.commit();
-    }
-  } else {
-    if (decision === 'approved') {
-      const invoice = (store[COLLECTIONS.INVOICES] || []).find((item) => item.id === request.invoice_id);
-      if (!invoice) throw new Error('The invoice for this request could not be found.');
-      invoice.due_date = request.requested_due_date;
-    }
-    Object.assign(request, updates);
-    const mockStore = getNormalizedMockDatabase();
-    if (!mockStore[COLLECTIONS.TENANT_NOTIFICATIONS]) {
-      mockStore[COLLECTIONS.TENANT_NOTIFICATIONS] = [];
-    }
-    mockStore[COLLECTIONS.TENANT_NOTIFICATIONS].unshift(notification);
-  }
-
-  return { ...request };
-}
-
-export async function submitDueDateExtensionRequest({ tenantId, requestedDueDate, reason = '' }) {
-  const store = await getStore();
-  const tenant = (store[COLLECTIONS.TENANTS] || []).find((item) => item.id === tenantId);
-  if (!tenant) throw new Error('Your tenant profile is not available. Please sign in again.');
-
-  const lease = (store[COLLECTIONS.LEASES] || []).find((item) => item.tenant_id === tenant.id && item.status === 'active');
-  if (!lease) throw new Error('Your active lease could not be found. Please contact the property administrator.');
-
-  const invoice = getLatestInvoiceForLease(store[COLLECTIONS.INVOICES] || [], lease.id);
-  if (!invoice) throw new Error('There is no current invoice to request an extension for.');
-
-  const existingRequest = (store[COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS] || []).find(
-    (request) => request.tenant_id === tenant.id && request.invoice_id === invoice.id && request.status === 'pending'
-  );
-  if (existingRequest) throw new Error('You already have a pending extension request for this invoice.');
-
-  const requestId = `extension-${Date.now()}`;
-  const request = {
-    id: requestId,
-    tenant_id: tenant.id,
-    invoice_id: invoice.id,
-    current_due_date: invoice.due_date,
-    requested_due_date: requestedDueDate,
-    reason: reason.trim(),
-    status: 'pending',
-    requested_at: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-  };
-
-  if (isFirebaseConfigured && db) {
-    try {
-      await writeDocument(COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS, requestId, request);
-    } catch (error) {
-      if (error?.code === 'permission-denied' || error?.code === 'firestore/permission-denied') {
-        throw new Error('The server has not enabled due-date requests yet. Ask the administrator to publish the updated Firestore rules, then try again.');
-      }
-      throw error;
-    }
-  } else {
-    const mockStore = getNormalizedMockDatabase();
-    const requests = mockStore[COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS] || (mockStore[COLLECTIONS.DUE_DATE_EXTENSION_REQUESTS] = []);
-    requests.unshift(request);
-  }
-
-  return {
-    id: request.id,
-    currentDueDate: request.current_due_date,
-    requestedDueDate: request.requested_due_date,
-    reason: request.reason,
-    status: request.status,
-    date: request.requested_at,
-  };
-}
-
-/**
  * 15. Tenant Complaints Scoped View
  */
 export async function getTenantComplaints(tenantId) {
@@ -1492,204 +1318,20 @@ export async function getRentBilling(billingPeriod = getCurrentBillingPeriod()) 
 
 function calculateElectricityCharge(reading) {
   if (!reading || String(reading.prev_kwh ?? '').trim() === '' || String(reading.curr_kwh ?? '').trim() === '') {
-    return { hasValidReading: false, usage: 0, amount: 0 };
+    return { hasValidReading: false, usage: 0, rate: 12, amount: 0 };
   }
 
   const previousKwh = Number(reading.prev_kwh);
   const currentKwh = Number(reading.curr_kwh);
   if (!Number.isFinite(previousKwh) || !Number.isFinite(currentKwh) || currentKwh < previousKwh) {
-    return { hasValidReading: false, usage: 0, amount: 0 };
+    return { hasValidReading: false, usage: 0, rate: 12, amount: 0 };
   }
 
   const rawRate = String(reading.rate_per_kwh ?? '').trim();
   const parsedRate = Number(reading.rate_per_kwh);
   const rate = rawRate !== '' && Number.isFinite(parsedRate) && parsedRate >= 0 ? parsedRate : 12;
   const usage = currentKwh - previousKwh;
-  return { hasValidReading: true, usage, amount: Math.round(usage * rate) };
-}
-
-function buildMonthlyInvoices(store, billingPeriod) {
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(billingPeriod || ''))) {
-    throw new Error('Choose a valid billing month.');
-  }
-
-  const tenants = store[COLLECTIONS.TENANTS] || [];
-  const leases = store[COLLECTIONS.LEASES] || [];
-  const rooms = store[COLLECTIONS.ROOMS] || [];
-  const roomTypes = store[COLLECTIONS.ROOM_TYPES] || [];
-  const readings = store[COLLECTIONS.UTILITY_READINGS] || [];
-  const invoices = store[COLLECTIONS.INVOICES] || [];
-  const activeLeases = leases.filter((lease) => lease.status === 'active');
-  const generated = [];
-  let alreadyBilled = 0;
-  let missingReadings = 0;
-  let skippedMissingRent = 0;
-
-  activeLeases.forEach((lease) => {
-    const hasInvoice = invoices.some((invoice) => invoice.lease_id === lease.id && invoice.billing_period === billingPeriod);
-    if (hasInvoice) {
-      alreadyBilled += 1;
-      return;
-    }
-
-    const room = rooms.find((item) => item.id === lease.room_id);
-    const roomType = roomTypes.find((item) => item.id === room?.type_id);
-    const tenant = tenants.find((item) => item.id === lease.tenant_id);
-    const leaseRent = Number(lease.agreed_monthly_rent);
-    const rent = leaseRent > 0 ? leaseRent : Number(roomType?.base_rent || 0);
-    if (!Number.isFinite(rent) || rent <= 0) {
-      skippedMissingRent += 1;
-      return;
-    }
-
-    const reading = readings.find((item) => item.room_id === lease.room_id && item.billing_period === billingPeriod);
-    const electricityResult = calculateElectricityCharge(reading);
-    if (!electricityResult.hasValidReading) missingReadings += 1;
-    const electricity = electricityResult.amount;
-    const id = `invoice-${lease.id}-${billingPeriod}`;
-    const total = toMoney(rent + electricity);
-    const [year, month] = billingPeriod.split('-').map(Number);
-    const dueDateValue = new Date(year, month, 1);
-    const dueDay = Math.min(Math.max(1, Number(lease.due_day_of_month) || 5), new Date(year, month + 1, 0).getDate());
-    dueDateValue.setDate(dueDay);
-    const dueDate = `${dueDateValue.getFullYear()}-${String(dueDateValue.getMonth() + 1).padStart(2, '0')}-${String(dueDateValue.getDate()).padStart(2, '0')}`;
-    const monthLabel = new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    const invoice = {
-      id,
-      lease_id: lease.id,
-      billing_period: billingPeriod,
-      invoice_type: 'monthly',
-      rent_charge: toMoney(rent),
-      utility_charge: electricity,
-      water_charge: 0,
-      security_deposit: 0,
-      other_charges: 0,
-      additional_charges: [],
-      total_amount: total,
-      due_date: dueDate,
-      status: 'unpaid',
-      created_at: new Date().toISOString(),
-      notes: `${monthLabel} rent${electricityResult.hasValidReading ? ' and electricity' : ''}`,
-    };
-
-    generated.push({ invoice, lease, tenant, room, reading: electricityResult.hasValidReading ? reading : null });
-  });
-
-  return { generated, activeLeaseCount: activeLeases.length, alreadyBilled, missingReadings, skippedMissingRent };
-}
-
-async function getMonthlyInvoiceSourceStore() {
-  if (!isFirebaseConfigured || !db) return getStore();
-  const [tenants, leases, rooms, roomTypes, readings, invoices] = await Promise.all([
-    readCollection(COLLECTIONS.TENANTS),
-    readCollection(COLLECTIONS.LEASES),
-    readCollection(COLLECTIONS.ROOMS),
-    readCollection(COLLECTIONS.ROOM_TYPES),
-    readCollection(COLLECTIONS.UTILITY_READINGS),
-    readCollection(COLLECTIONS.INVOICES),
-  ]);
-  return {
-    [COLLECTIONS.TENANTS]: tenants,
-    [COLLECTIONS.LEASES]: leases,
-    [COLLECTIONS.ROOMS]: rooms,
-    [COLLECTIONS.ROOM_TYPES]: roomTypes,
-    [COLLECTIONS.UTILITY_READINGS]: readings,
-    [COLLECTIONS.INVOICES]: invoices,
-  };
-}
-
-/** Return a safe preview of the current month's invoices before creating them. */
-export async function getMonthlyInvoicePreview(billingPeriod) {
-  const store = await getMonthlyInvoiceSourceStore();
-  const preview = buildMonthlyInvoices(store, billingPeriod);
-  return {
-    billingPeriod,
-    activeLeaseCount: preview.activeLeaseCount,
-    alreadyBilled: preview.alreadyBilled,
-    missingReadings: preview.missingReadings,
-    skippedMissingRent: preview.skippedMissingRent,
-    invoices: preview.generated.map(({ invoice, tenant, room }) => ({
-      id: invoice.id,
-      tenantName: tenant ? `${tenant.first_name} ${tenant.last_name}` : 'Tenant',
-      roomNumber: room?.room_number || '—',
-      total: invoice.total_amount,
-    })),
-    totalAmount: toMoney(preview.generated.reduce((sum, entry) => sum + entry.invoice.total_amount, 0)),
-  };
-}
-
-/** Create one unpaid invoice per active lease for a month, skipping existing invoices. */
-export async function generateMonthlyInvoices(billingPeriod) {
-  const store = await getMonthlyInvoiceSourceStore();
-  const preview = buildMonthlyInvoices(store, billingPeriod);
-  if (!preview.generated.length) {
-    return { createdCount: 0, alreadyBilled: preview.alreadyBilled, missingReadings: preview.missingReadings, skippedMissingRent: preview.skippedMissingRent, totalAmount: 0 };
-  }
-
-  const generatedAt = new Date().toISOString();
-  const notificationEntries = preview.generated
-    .filter(({ tenant }) => tenant?.id)
-    .map(({ invoice, lease, tenant }) => {
-      const notificationId = `notif-invoice-${lease.id}-${billingPeriod}`;
-      const monthLabel = new Date(`${billingPeriod}-01T12:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-      return {
-        id: notificationId,
-        tenant_id: tenant.id,
-        type: 'invoice_created',
-        title: 'New monthly bill',
-        message: `Your ${monthLabel} bill for PHP ${invoice.total_amount.toLocaleString()} is ready. Due date: ${invoice.due_date}.`,
-        read: false,
-        created_at: generatedAt,
-        related_invoice_id: invoice.id,
-      };
-    });
-
-  if (isFirebaseConfigured && db) {
-    const { doc, runTransaction } = await getFirestoreFns();
-    for (let offset = 0; offset < preview.generated.length; offset += 200) {
-      const invoiceChunk = preview.generated.slice(offset, offset + 200);
-      const notificationChunk = invoiceChunk
-        .filter(({ tenant }) => tenant?.id)
-        .map(({ invoice, lease, tenant }) => {
-          const notificationId = `notif-invoice-${lease.id}-${billingPeriod}`;
-          const monthLabel = new Date(`${billingPeriod}-01T12:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-          return {
-            id: notificationId,
-            tenant_id: tenant.id,
-            type: 'invoice_created',
-            title: 'New monthly bill',
-            message: `Your ${monthLabel} bill for PHP ${invoice.total_amount.toLocaleString()} is ready. Due date: ${invoice.due_date}.`,
-            read: false,
-            created_at: generatedAt,
-            related_invoice_id: invoice.id,
-          };
-        });
-      await runTransaction(db, async (transaction) => {
-        const invoiceRefs = invoiceChunk.map(({ invoice }) => doc(db, COLLECTIONS.INVOICES, invoice.id));
-        const existingInvoices = await Promise.all(invoiceRefs.map((ref) => transaction.get(ref)));
-        if (existingInvoices.some((snapshot) => snapshot.exists())) {
-          throw new Error('A bill for this month was generated while you were reviewing. Refresh Billing and try again.');
-        }
-        invoiceChunk.forEach(({ invoice }, index) => transaction.set(invoiceRefs[index], invoice));
-        notificationChunk.forEach((notification) =>
-          transaction.set(doc(db, COLLECTIONS.TENANT_NOTIFICATIONS, notification.id), notification)
-        );
-      });
-    }
-  } else {
-    const mockStore = getNormalizedMockDatabase();
-    mockStore[COLLECTIONS.INVOICES].push(...preview.generated.map(({ invoice }) => invoice));
-    if (!mockStore[COLLECTIONS.TENANT_NOTIFICATIONS]) mockStore[COLLECTIONS.TENANT_NOTIFICATIONS] = [];
-    mockStore[COLLECTIONS.TENANT_NOTIFICATIONS].unshift(...notificationEntries);
-  }
-
-  return {
-    createdCount: preview.generated.length,
-    alreadyBilled: preview.alreadyBilled,
-    missingReadings: preview.missingReadings,
-    skippedMissingRent: preview.skippedMissingRent,
-    totalAmount: toMoney(preview.generated.reduce((sum, entry) => sum + entry.invoice.total_amount, 0)),
-  };
+  return { hasValidReading: true, usage, rate, amount: Math.round(usage * rate) };
 }
 
 /**
@@ -1734,7 +1376,7 @@ export async function getUtilityBills() {
       const electricityResult = calculateElectricityCharge(reading);
       const usage = electricityResult.usage;
       const electricity = invoice?.utility_charge ?? electricityResult.amount;
-      const water = invoice?.water_charge || 0;
+      const water = 0;
       const rent = invoice?.rent_charge ?? lease.agreed_monthly_rent ?? roomType?.base_rent ?? 0;
       const additionalCharges = Array.isArray(invoice?.additional_charges)
         ? invoice.additional_charges
@@ -1742,6 +1384,12 @@ export async function getUtilityBills() {
           ? [{ id: 'legacy-other', label: 'Other charges', amount: Number(invoice.other_charges) }]
           : [];
       const additionalTotal = additionalCharges.reduce((sum, charge) => sum + Number(charge.amount || 0), 0);
+      const invoiceTotal = invoice ? getInvoiceTotalAmount(invoice) : rent + electricity + additionalTotal;
+      const invoicePaid = invoice
+        ? (store[COLLECTIONS.PAYMENTS] || [])
+          .filter((payment) => payment.invoice_id === invoice.id)
+          .reduce((sum, payment) => sum + Number(payment.amount_paid || 0), 0)
+        : 0;
       return {
         id: `${lease.id}-${invoice?.billing_period || reading?.billing_period || billingPeriod || 'current'}`,
         leaseId: lease.id,
@@ -1753,12 +1401,17 @@ export async function getUtilityBills() {
         prevKwh: reading?.prev_kwh ?? '—',
         currKwh: reading?.curr_kwh ?? '—',
         usage,
+        hasValidReading: electricityResult.hasValidReading,
+        ratePerKwh: electricityResult.rate,
+        calculatedElectricity: electricityResult.amount,
         rent,
         electricity,
         water,
         additionalCharges,
-        total: invoice ? getInvoiceTotalAmount(invoice) : rent + electricity + water + additionalTotal,
-        status: invoice?.status || 'unbilled',
+        total: invoiceTotal,
+        status: invoice
+          ? invoicePaid >= invoiceTotal ? 'paid' : invoicePaid > 0 ? 'partial' : 'unpaid'
+          : 'unbilled',
         color: tenant?.avatar_color || '#999',
       };
     }).sort((a, b) => String(b.billingPeriod).localeCompare(String(a.billingPeriod)) || String(a.roomNumber).localeCompare(String(b.roomNumber)));
@@ -1769,14 +1422,14 @@ export async function getUtilityBills() {
 }
 
 /** Update an existing utility bill or create the period invoice for an active lease. */
-export async function updateUtilityBill({ invoiceId, leaseId, billingPeriod, monthlyRent, electricity, water, additionalCharges = [] }) {
+export async function updateUtilityBill({ invoiceId, leaseId, billingPeriod, monthlyRent, consumedKwh, ratePerKwh, additionalCharges = [] }) {
   if (!invoiceId && !leaseId) throw new Error('Select a room before creating its bill.');
-  if ([monthlyRent, electricity, water].some((value) => String(value).trim() === '')) {
-    throw new Error('Enter rent, electricity, and water charges. Use 0 if a charge does not apply.');
+  if ([monthlyRent, consumedKwh, ratePerKwh].some((value) => String(value).trim() === '')) {
+    throw new Error('Enter rent, total kWh consumed, and the rate per kWh. Use 0 if a value does not apply.');
   }
-  const values = [monthlyRent, electricity, water].map(Number);
+  const values = [monthlyRent, consumedKwh, ratePerKwh].map(Number);
   if (values.some((value) => !Number.isFinite(value) || value < 0)) {
-    throw new Error('Rent, electricity, and water charges must be valid non-negative amounts.');
+    throw new Error('Rent, kWh consumed, and the rate per kWh must be valid non-negative amounts.');
   }
   const chargesInput = additionalCharges || [];
   if (chargesInput.some((charge) => String(charge.label || '').trim() === '' || String(charge.amount ?? '').trim() === '')) {
@@ -1792,14 +1445,38 @@ export async function updateUtilityBill({ invoiceId, leaseId, billingPeriod, mon
   }
   const additionalTotal = normalizedCharges.reduce((sum, charge) => sum + charge.amount, 0);
 
-  const [rentCharge, electricityCharge, waterCharge] = values;
+  const [rentCharge, usage, rate] = values;
+  const electricityCharge = Math.round(usage * rate);
   const store = await getStore();
   let invoice = (store[COLLECTIONS.INVOICES] || []).find((item) => item.id === invoiceId);
   if (invoiceId && !invoice) throw new Error('The bill could not be found. Refresh and try again.');
+  const lease = invoice
+    ? (store[COLLECTIONS.LEASES] || []).find((item) => item.id === invoice.lease_id)
+    : (store[COLLECTIONS.LEASES] || []).find((item) => item.id === leaseId && item.status === 'active');
+  if (!lease) throw new Error('This room has no lease available for billing. Refresh and try again.');
+  const period = billingPeriod || invoice?.billing_period || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+  const readings = store[COLLECTIONS.UTILITY_READINGS] || [];
+  const reading = readings.find((item) => item.room_id === lease.room_id && item.billing_period === period);
+  const previousKwh = Number(reading?.prev_kwh) || 0;
+  const readingId = reading?.id || `reading-${Date.now()}`;
+  const readingUpdates = {
+    room_id: lease.room_id,
+    billing_period: period,
+    prev_kwh: previousKwh,
+    curr_kwh: previousKwh + usage,
+    rate_per_kwh: rate,
+    reading_date: new Date().toISOString().slice(0, 10),
+  };
+  if (isFirebaseConfigured && db) {
+    if (reading) await updateDocument(COLLECTIONS.UTILITY_READINGS, readingId, readingUpdates);
+    else await writeDocument(COLLECTIONS.UTILITY_READINGS, readingId, { ...readingUpdates, id: readingId });
+  } else if (reading) {
+    Object.assign(reading, readingUpdates);
+  } else {
+    readings.push({ id: readingId, ...readingUpdates });
+    store[COLLECTIONS.UTILITY_READINGS] = readings;
+  }
   if (!invoice) {
-    const lease = (store[COLLECTIONS.LEASES] || []).find((item) => item.id === leaseId && item.status === 'active');
-    if (!lease) throw new Error('This room has no active tenant lease. Refresh and try again.');
-    const period = billingPeriod || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
     const [year, month] = period.split('-').map(Number);
     const dueDate = new Date(year, month, 1);
     const dueDay = Math.max(1, Number(lease.due_day_of_month) || 5);
@@ -1810,17 +1487,17 @@ export async function updateUtilityBill({ invoiceId, leaseId, billingPeriod, mon
       lease_id: lease.id,
       billing_period: period,
       invoice_type: 'monthly',
-      rent_charge: values[0],
-      utility_charge: values[1],
-      water_charge: values[2],
+      rent_charge: rentCharge,
+      utility_charge: electricityCharge,
+      water_charge: 0,
       security_deposit: 0,
       other_charges: additionalTotal,
       additional_charges: normalizedCharges,
-      total_amount: values.reduce((sum, value) => sum + value, 0) + additionalTotal,
+      total_amount: rentCharge + electricityCharge + additionalTotal,
       due_date: dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       status: 'unpaid',
       created_at: new Date().toISOString(),
-      notes: `${period} billing: Rent, electricity, and water`,
+      notes: `${period} billing: Rent and electricity`,
     };
     if (isFirebaseConfigured && db) {
       await writeDocument(COLLECTIONS.INVOICES, newId, invoice);
@@ -1832,7 +1509,7 @@ export async function updateUtilityBill({ invoiceId, leaseId, billingPeriod, mon
   const legacyOtherTotal = !Array.isArray(invoice.additional_charges) ? Number(invoice.other_charges || 0) : 0;
   const effectiveCharges = normalizedCharges.length || Array.isArray(invoice.additional_charges) ? normalizedCharges : legacyOtherTotal > 0 ? [{ id: 'legacy-other', label: 'Other charges', amount: legacyOtherTotal }] : [];
   const effectiveAdditionalTotal = effectiveCharges.reduce((sum, charge) => sum + Number(charge.amount || 0), 0);
-  const totalAmount = rentCharge + electricityCharge + waterCharge + effectiveAdditionalTotal;
+  const totalAmount = rentCharge + electricityCharge + effectiveAdditionalTotal;
   const totalPaid = (store[COLLECTIONS.PAYMENTS] || [])
     .filter((payment) => payment.invoice_id === invoiceId)
     .reduce((sum, payment) => sum + Number(payment.amount_paid || 0), 0);
@@ -1840,7 +1517,7 @@ export async function updateUtilityBill({ invoiceId, leaseId, billingPeriod, mon
   const updates = {
     rent_charge: rentCharge,
     utility_charge: electricityCharge,
-    water_charge: waterCharge,
+    water_charge: 0,
     security_deposit: 0,
     additional_charges: effectiveCharges,
     other_charges: effectiveAdditionalTotal,

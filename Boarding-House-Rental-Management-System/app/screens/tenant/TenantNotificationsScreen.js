@@ -115,10 +115,6 @@ export default function TenantNotificationsScreen({ user }) {
         return { name: 'document-text', color: '#f59e0b', bg: '#fef3c7', label: 'Invoice' };
       case 'payment_recorded':
         return { name: 'cash', color: colors.successText, bg: colors.successBg, label: 'Payment' };
-      case 'due_date_extension_approved':
-        return { name: 'calendar', color: colors.successText, bg: colors.successBg, label: 'Date Approved' };
-      case 'due_date_extension_rejected':
-        return { name: 'calendar', color: colors.dangerText, bg: colors.dangerBg, label: 'Date Declined' };
       default:
         return { name: 'notifications', color: colors.accent, bg: colors.accentBg, label: 'Notification' };
     }

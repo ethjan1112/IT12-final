@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StatusBar, TouchableOpacity, Platform, Modal, Pressable, Text, ScrollView, Animated } from 'react-native';
+import { View, StatusBar, TouchableOpacity, Platform, Modal, Pressable, Text, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { isDesktop, isMobile, safeAreaTop, fs, spacing } from './utils/responsive';
 import { useTheme } from './utils/ThemeContext';
@@ -17,21 +17,16 @@ import LandlordReports from './screens/landlord/LandlordReports';
 import PendingApprovalsScreen from './screens/landlord/PendingApprovalsScreen';
 import TenantFinancialManagement from './screens/landlord/TenantFinancialManagement';
 import TenantDetailFinancial from './screens/landlord/TenantDetailFinancial';
-import PaymentProofReviewScreen from './screens/landlord/PaymentProofReviewScreen';
-import DueDateExtensionRequestsScreen from './screens/landlord/DueDateExtensionRequestsScreen';
 
 // Import navigation
 import LandlordBottomNav from './components/LandlordBottomNav';
-import { getPendingDueDateExtensionRequestCount, getPendingPaymentProofCount, getPendingTenantRegistrationCount } from './services/dataService';
+import { getPendingTenantRegistrationCount } from './services/dataService';
 
 export default function LandlordApp({ user, onLogout }) {
   const [activeScreen, setActiveScreen] = useState('dashboard');
   const [menuVisible, setMenuVisible] = useState(false);
-  const [slideAnim] = useState(new Animated.Value(-280));
   const [navigationParams, setNavigationParams] = useState(null);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
-  const [pendingExtensionRequestsCount, setPendingExtensionRequestsCount] = useState(0);
-  const [pendingPaymentProofCount, setPendingPaymentProofCount] = useState(0);
   const { isDark, toggleTheme, colors } = useTheme();
 
   useEffect(() => {
@@ -39,15 +34,9 @@ export default function LandlordApp({ user, onLogout }) {
 
     const refreshSignupCount = async () => {
       try {
-        const [approvalCount, extensionCount, paymentProofCount] = await Promise.all([
-          getPendingTenantRegistrationCount(),
-          getPendingDueDateExtensionRequestCount(),
-          getPendingPaymentProofCount(),
-        ]);
+        const approvalCount = await getPendingTenantRegistrationCount();
         if (isMounted) {
           setPendingApprovalsCount(approvalCount);
-          setPendingExtensionRequestsCount(extensionCount);
-          setPendingPaymentProofCount(paymentProofCount);
         }
       } catch (error) {
         console.warn('Could not refresh tenant sign-up badge:', error.message || error);
@@ -71,8 +60,8 @@ export default function LandlordApp({ user, onLogout }) {
         return 'Rooms';
       case 'billing':
         return 'Bills & Utilities';
-      case 'issues':
-        return 'Issues';
+      case 'complaints':
+        return 'Complaints';
       case 'announcements':
         return 'Announcements';
       case 'reports':
@@ -83,10 +72,6 @@ export default function LandlordApp({ user, onLogout }) {
         return 'Tenant Finances';
       case 'tenant-detail':
         return 'Tenant Financial Details';
-      case 'payment-proofs':
-        return 'Payment Verification';
-      case 'due-date-requests':
-        return 'Due Date Requests';
       default:
         return 'Dashboard';
     }
@@ -122,8 +107,8 @@ export default function LandlordApp({ user, onLogout }) {
       case 'rooms':
         return <LandlordRooms />;
       case 'billing':
-        return <BillingScreen navigation={navigation} />;
-      case 'issues':
+        return <BillingScreen />;
+      case 'complaints':
         return <IssuesScreen />;
       case 'announcements':
         return <AnnouncementsScreen />;
@@ -135,26 +120,11 @@ export default function LandlordApp({ user, onLogout }) {
         return (
           <TenantFinancialManagement
             navigation={navigation}
-            pendingPaymentProofCount={pendingPaymentProofCount}
             initialFilter={navigationParams?.filter || 'all'}
           />
         );
       case 'tenant-detail':
         return <TenantDetailFinancial route={{ params: navigationParams }} navigation={navigation} />;
-      case 'payment-proofs':
-        return <PaymentProofReviewScreen navigation={navigation} reviewerUserId={user?.uid} />;
-      case 'due-date-requests':
-        return (
-          <DueDateExtensionRequestsScreen
-            onRequestReviewed={async () => {
-              try {
-                setPendingExtensionRequestsCount(await getPendingDueDateExtensionRequestCount());
-              } catch (error) {
-                console.warn('Could not refresh due-date request badge:', error.message || error);
-              }
-            }}
-          />
-        );
       default:
         return <LandlordDashboard />;
     }
@@ -162,21 +132,10 @@ export default function LandlordApp({ user, onLogout }) {
 
   const openMenu = () => {
     setMenuVisible(true);
-    Animated.timing(slideAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
   };
 
   const closeMenu = () => {
-    Animated.timing(slideAnim, {
-      toValue: -280,
-      duration: 250,
-      useNativeDriver: true,
-    }).start(() => {
-      setMenuVisible(false);
-    });
+    setMenuVisible(false);
   };
 
   const handleMenuNavigate = (screen) => {
@@ -185,9 +144,8 @@ export default function LandlordApp({ user, onLogout }) {
   };
 
   const menuItems = [
-    { id: 'billing', label: 'Bills & Utilities', icon: 'card', iconOutline: 'card-outline' },
-    { id: 'due-date-requests', label: 'Due Date Requests', icon: 'calendar', iconOutline: 'calendar-outline' },
-    { id: 'issues', label: 'Issues', icon: 'alert-circle', iconOutline: 'alert-circle-outline' },
+    { id: 'rooms', label: 'Rooms', icon: 'bed', iconOutline: 'bed-outline' },
+    { id: 'complaints', label: 'Complaints', icon: 'alert-circle', iconOutline: 'alert-circle-outline' },
     { id: 'announcements', label: 'Announcements', icon: 'megaphone', iconOutline: 'megaphone-outline' },
     { id: 'reports', label: 'Reports', icon: 'bar-chart', iconOutline: 'bar-chart-outline' },
   ];
@@ -208,19 +166,23 @@ export default function LandlordApp({ user, onLogout }) {
 
       {isDesktop ? (
         <View style={{ flex: 1, flexDirection: 'row' }}>
-          <LandlordBottomNav activeScreen={activeScreen} onNavigate={handleNavigate} user={user} pendingApprovalsCount={pendingApprovalsCount} pendingPaymentProofCount={pendingPaymentProofCount} />
+          <LandlordBottomNav activeScreen={activeScreen} onNavigate={handleNavigate} user={user} pendingApprovalsCount={pendingApprovalsCount} />
           <View style={{ flex: 1 }}>{renderScreen()}</View>
         </View>
       ) : (
         <>
           <View style={{ flex: 1 }}>{renderScreen()}</View>
-          <LandlordBottomNav activeScreen={activeScreen} onNavigate={handleNavigate} user={user} pendingApprovalsCount={pendingApprovalsCount} pendingPaymentProofCount={pendingPaymentProofCount} />
+          <LandlordBottomNav activeScreen={activeScreen} onNavigate={handleNavigate} user={user} pendingApprovalsCount={pendingApprovalsCount} />
         </>
       )}
 
-      <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={closeMenu}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }} onPress={closeMenu}>
-          <Animated.View style={{ width: 280, height: '100%', backgroundColor: colors.card, paddingTop: Platform.OS === 'ios' ? safeAreaTop + 20 : 20, paddingHorizontal: 16, transform: [{ translateX: slideAnim }] }}>
+      <Modal visible={menuVisible} transparent animationType="fade" statusBarTranslucent onRequestClose={closeMenu}>
+        <View style={{ flex: 1, backgroundColor: 'transparent', flexDirection: 'row' }}>
+          <Pressable
+            style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.35)' }}
+            onPress={closeMenu}
+          />
+          <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: '50%', zIndex: 2, elevation: 8, backgroundColor: colors.card, paddingTop: Platform.OS === 'ios' ? safeAreaTop + 20 : 20, paddingHorizontal: 16 }}>
             <Pressable style={{ flex: 1 }} onPress={(e) => e.stopPropagation()}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 30 }}>
                 <Text style={{ fontSize: fs(20), fontWeight: '800', color: colors.text }}>Menu</Text>
@@ -231,23 +193,17 @@ export default function LandlordApp({ user, onLogout }) {
               <ScrollView showsVerticalScrollIndicator={false}>
                 {menuItems.map((item) => {
                   const isActive = activeScreen === item.id;
-                  const badgeCount = item.id === 'due-date-requests' ? pendingExtensionRequestsCount : 0;
                   return (
                     <TouchableOpacity key={item.id} activeOpacity={0.7} onPress={() => handleMenuNavigate(item.id)} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 12, marginBottom: 6, backgroundColor: isActive ? colors.accentBg : 'transparent' }}>
                       <Ionicons name={isActive ? item.icon : item.iconOutline} size={22} color={isActive ? colors.accent : colors.textSecondary} />
                       <Text style={{ flex: 1, fontSize: fs(15), fontWeight: isActive ? '700' : '500', color: isActive ? colors.accent : colors.text }}>{item.label}</Text>
-                      {badgeCount > 0 && (
-                        <View style={{ minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6, backgroundColor: colors.dangerText, alignItems: 'center', justifyContent: 'center' }}>
-                          <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>{badgeCount > 99 ? '99+' : badgeCount}</Text>
-                        </View>
-                      )}
                     </TouchableOpacity>
                   );
                 })}
               </ScrollView>
             </Pressable>
-          </Animated.View>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
     </View>
   );

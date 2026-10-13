@@ -33,6 +33,11 @@ export default function TenantApplicationStatusCard({ tenant, tenantId, refreshK
   const [proofImage, setProofImage] = useState(null);
 
   const loadRequest = async () => {
+    if (tenant?.accountStatus !== 'pending') {
+      setRequest(null);
+      return;
+    }
+
     try {
       setRequest(await getTenantRoomAssignmentRequest(tenantId));
     } catch (loadError) {
@@ -42,7 +47,7 @@ export default function TenantApplicationStatusCard({ tenant, tenantId, refreshK
 
   useEffect(() => {
     loadRequest();
-  }, [tenantId, refreshKey]);
+  }, [tenantId, refreshKey, tenant?.accountStatus]);
 
   const openRoomPicker = async () => {
     setModalVisible(true);
@@ -211,14 +216,16 @@ export default function TenantApplicationStatusCard({ tenant, tenantId, refreshK
             {tenant.rejectionReason || 'Please contact the property manager for more information.'}
           </Text>
         )}
-        <TouchableOpacity
-          onPress={async () => { await loadRequest(); onChanged?.(); }}
-          accessibilityRole="button"
-          style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, marginTop: 5 }}
-        >
-          <Ionicons name="refresh-outline" size={15} color={colors.accent} />
-          <Text style={{ color: colors.accent, fontSize: fs(12), fontWeight: '700' }}>Refresh application status</Text>
-        </TouchableOpacity>
+        {isPending && (
+          <TouchableOpacity
+            onPress={async () => { await loadRequest(); onChanged?.(); }}
+            accessibilityRole="button"
+            style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, marginTop: 5 }}
+          >
+            <Ionicons name="refresh-outline" size={15} color={colors.accent} />
+            <Text style={{ color: colors.accent, fontSize: fs(12), fontWeight: '700' }}>Refresh application status</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <Modal visible={modalVisible} transparent animationType="slide" onRequestClose={() => !submitting && setModalVisible(false)}>

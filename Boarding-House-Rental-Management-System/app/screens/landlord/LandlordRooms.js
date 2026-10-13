@@ -178,12 +178,14 @@ export default function RoomsScreen() {
     return true;
   });
   const pageCount = Math.ceil(filteredRooms.length / roomsPerPage);
-
   const goToRoomPage = (page) => {
-    const nextPage = Math.max(0, Math.min(pageCount - 1, page));
-    setRoomPage(nextPage);
+    setRoomPage(Math.max(0, Math.min(pageCount - 1, page)));
   };
   const pageRooms = filteredRooms.slice(roomPage * roomsPerPage, (roomPage + 1) * roomsPerPage);
+
+  useEffect(() => {
+    setRoomPage(0);
+  }, [filter]);
 
   useEffect(() => {
     if (roomPage >= pageCount && roomPage > 0) {
@@ -303,7 +305,7 @@ export default function RoomsScreen() {
                 <TouchableOpacity 
                   key={tab.key}
                   activeOpacity={0.7}
-                  onPress={() => { setFilter(tab.key); goToRoomPage(0); }}
+                  onPress={() => setFilter(tab.key)}
                   style={{ 
                     minHeight: 40,
                     paddingHorizontal: isDesktop ? 22 : 16, 
@@ -335,7 +337,11 @@ export default function RoomsScreen() {
 
       {/* Room Grid */}
       <View style={{ flex: 1, paddingHorizontal: padding, alignItems: isDesktop ? 'center' : 'stretch' }}>
-        <View style={{ flex: 1, width: '100%', alignItems: isDesktop ? 'center' : 'stretch', overflow: 'hidden' }}>
+        <ScrollView
+          style={{ flex: 1, width: '100%' }}
+          contentContainerStyle={{ alignItems: isDesktop ? 'center' : 'stretch', paddingBottom: spacing.md }}
+          showsVerticalScrollIndicator={false}
+        >
         <View style={{ maxWidth: containerMaxWidth, width: '100%' }}>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap }}>
             {pageRooms.map((room) => {
@@ -464,7 +470,21 @@ export default function RoomsScreen() {
               </TouchableOpacity>
             </View>
           )}
-          {filteredRooms.length > 0 && (
+        </View>
+        </ScrollView>
+      </View>
+
+      {/* Fixed room pager */}
+      {filteredRooms.length > 0 && (
+        <View style={{
+          backgroundColor: colors.bg,
+          paddingHorizontal: padding,
+          paddingTop: spacing.sm,
+          borderTopWidth: 1,
+          borderTopColor: colors.cardBorder,
+          alignItems: 'center',
+        }}>
+          <View style={{ maxWidth: containerMaxWidth, width: '100%' }}>
             <TenantListPager
               page={roomPage}
               pageSize={roomsPerPage}
@@ -472,43 +492,9 @@ export default function RoomsScreen() {
               onPageChange={goToRoomPage}
               colors={colors}
             />
-          )}
-        </View>
-        </View>
-      </View>
-
-      {/* Legend */}
-      <View style={{ 
-        backgroundColor: colors.bg, 
-        paddingVertical: spacing.md, 
-        paddingHorizontal: padding,
-        borderTopWidth: 1, 
-        borderTopColor: colors.cardBorder,
-        alignItems: 'center',
-      }}>
-        <View style={{ 
-          maxWidth: containerMaxWidth, 
-          width: '100%',
-          flexDirection: 'row', 
-          justifyContent: 'center', 
-          alignItems: 'center', 
-          flexWrap: 'wrap',
-          gap: isMobile ? spacing.md : spacing.xl,
-        }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.success }} />
-            <Text style={{ fontSize: fs(12), color: colors.textSecondary, fontWeight: '600' }}>Paid</Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.warning }} />
-            <Text style={{ fontSize: fs(12), color: colors.textSecondary, fontWeight: '600' }}>Balance</Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.vacantBorder }} />
-            <Text style={{ fontSize: fs(12), color: colors.textSecondary, fontWeight: '600' }}>Vacant</Text>
           </View>
         </View>
-      </View>
+      )}
 
       <Modal visible={createModalVisible} transparent animationType="fade" onRequestClose={closeCreateRoom}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' }}>

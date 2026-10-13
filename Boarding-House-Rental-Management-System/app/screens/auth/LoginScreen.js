@@ -356,10 +356,11 @@ export default function LoginScreen({ onLoginSuccess }) {
     return () => { active = false; };
   }, []);
 
-  const rememberCurrentAccount = async (nextEmail) => {
+  const rememberCurrentAccount = async (nextEmail, shouldRemember = rememberAccount) => {
     try {
-      if (rememberAccount) {
-        await AsyncStorage.setItem(REMEMBERED_ACCOUNT_KEY, JSON.stringify({ email: nextEmail }));
+      const cleanEmail = String(nextEmail || '').trim();
+      if (shouldRemember && cleanEmail) {
+        await AsyncStorage.setItem(REMEMBERED_ACCOUNT_KEY, JSON.stringify({ email: cleanEmail }));
       } else {
         await AsyncStorage.removeItem(REMEMBERED_ACCOUNT_KEY);
       }
@@ -371,9 +372,12 @@ export default function LoginScreen({ onLoginSuccess }) {
 
   const changeRememberAccount = (value) => {
     setRememberAccount(value);
-    if (!value) {
-      AsyncStorage.removeItem(REMEMBERED_ACCOUNT_KEY).catch(() => {});
-    }
+    rememberCurrentAccount(email, value);
+  };
+
+  const changeLoginEmail = (value) => {
+    setEmail(value);
+    if (rememberAccount) rememberCurrentAccount(value, true);
   };
 
   /* ── Auth handlers ────────────────────────────────── */
@@ -654,7 +658,7 @@ export default function LoginScreen({ onLoginSuccess }) {
                   autoComplete="email"
                   textContentType="emailAddress"
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={changeLoginEmail}
                   returnKeyType="next"
                   onSubmitEditing={() => passwordRef.current?.focus()}
                 />

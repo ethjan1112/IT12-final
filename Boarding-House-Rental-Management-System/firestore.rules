@@ -148,20 +148,6 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    match /due_date_extension_requests/{requestId} {
-      allow read: if isLandlord() || ownsTenant(resource.data.tenant_id);
-      allow create: if isLandlord()
-        || (ownsTenant(request.resource.data.tenant_id)
-          && request.resource.data.id == requestId
-          && request.resource.data.status == 'pending'
-          && ownsInvoice(request.resource.data.invoice_id)
-          && request.resource.data.keys().hasOnly([
-            'id', 'tenant_id', 'invoice_id', 'current_due_date', 'requested_due_date', 'reason', 'status', 'requested_at'
-          ]));
-      allow update: if isLandlord();
-      allow delete: if isLandlord();
-    }
-
     match /announcements/{announcementId} {
       allow read: if signedIn();
       allow create, update: if isLandlord() && request.resource.data.author_user_id == request.auth.uid;

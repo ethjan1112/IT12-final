@@ -4,20 +4,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { isDesktop, fs } from '../utils/responsive';
 import { useTheme } from '../utils/ThemeContext';
 
-export default function LandlordBottomNav({ user, activeScreen, onNavigate, pendingApprovalsCount = 0, pendingPaymentProofCount = 0 }) {
+export default function LandlordBottomNav({ user, activeScreen, onNavigate, pendingApprovalsCount = 0 }) {
   const { colors } = useTheme();
-  const getBadgeCount = (item) => {
-    if (item.id === 'approvals') return pendingApprovalsCount;
-    if (item.id === 'finances') return pendingPaymentProofCount;
-    return 0;
-  };
-  const getBadgeDescription = (item) => item.id === 'finances' ? 'payment proofs to review' : 'pending tenant applications';
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'home', iconOutline: 'home-outline' },
     { id: 'approvals', label: 'Applications', icon: 'checkmark-done-circle', iconOutline: 'checkmark-done-circle-outline' },
     { id: 'finances', label: 'Finances', icon: 'wallet', iconOutline: 'wallet-outline' },
-    { id: 'rooms', label: 'Rooms', icon: 'bed', iconOutline: 'bed-outline' },
+    { id: 'billing', label: 'Bills & Utilities', icon: 'card', iconOutline: 'card-outline' },
   ];
 
   // Desktop: sidebar
@@ -50,13 +44,13 @@ export default function LandlordBottomNav({ user, activeScreen, onNavigate, pend
 
         {navItems.map((item) => {
           const isActive = activeScreen === item.id;
-          const badgeCount = getBadgeCount(item);
+          const badgeCount = item.id === 'approvals' ? pendingApprovalsCount : 0;
           return (
             <TouchableOpacity
               key={item.id}
               activeOpacity={0.82}
               accessibilityRole="button"
-              accessibilityLabel={`Navigate to ${item.label}${badgeCount > 0 ? `, ${badgeCount} ${getBadgeDescription(item)}` : ''}`}
+              accessibilityLabel={`Navigate to ${item.label}${badgeCount > 0 ? `, ${badgeCount} pending tenant applications` : ''}`}
               accessibilityState={{ selected: isActive }}
               style={{
                 flexDirection: 'row',
@@ -112,13 +106,13 @@ export default function LandlordBottomNav({ user, activeScreen, onNavigate, pend
     }}>
       {navItems.map((item) => {
         const isActive = activeScreen === item.id;
-        const badgeCount = getBadgeCount(item);
+        const badgeCount = item.id === 'approvals' ? pendingApprovalsCount : 0;
         return (
           <TouchableOpacity
             key={item.id}
             activeOpacity={0.82}
             accessibilityRole="button"
-            accessibilityLabel={`Navigate to ${item.label}${badgeCount > 0 ? `, ${badgeCount} ${getBadgeDescription(item)}` : ''}`}
+            accessibilityLabel={`Navigate to ${item.label}${badgeCount > 0 ? `, ${badgeCount} pending tenant applications` : ''}`}
             accessibilityState={{ selected: isActive }}
             style={{ flex: 1, alignItems: 'center', paddingVertical: 3, minHeight: 50, justifyContent: 'center', borderRadius: 26, overflow: 'hidden' }}
             onPress={() => onNavigate(item.id)}
