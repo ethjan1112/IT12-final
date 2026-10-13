@@ -1,6 +1,6 @@
 import ScreenSkeleton from '../../components/ScreenSkeleton';
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { isMobile, isDesktop, getResponsivePadding, fs, spacing, cardStyle, cardShadow } from '../../utils/responsive';
 import { useTheme } from '../../utils/ThemeContext';
@@ -25,7 +25,9 @@ export default function OwnerDashboard() {
   const containerMaxWidth = isDesktop ? 1180 : '100%';
 
   const [loading, setLoading] = useState(true);
+  const [revenueLoading, setRevenueLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [revenueError, setRevenueError] = useState(null);
   const [config, setConfig] = useState(null);
   const [revenue, setRevenue] = useState(null);
   const [occupancy, setOccupancy] = useState(null);
@@ -34,34 +36,75 @@ export default function OwnerDashboard() {
   const [unpaidTenants, setUnpaidTenants] = useState([]);
   const [selectedPeriod, setSelectedPeriod] = useState(getCurrentPeriod);
   const [showAllUnpaid, setShowAllUnpaid] = useState(false);
+  const revenueCache = useRef({});
 
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        const configData = await getBoardingHouseConfig();
-        const revenueData = await getRevenue(selectedPeriod);
-        const occupancyData = await getOccupancyStats();
-        const unpaidStatsData = await getUnpaidStats();
-        const issueStatsData = await getIssueStats();
-        const unpaidTenantsData = await getUnpaidTenants();
-
+    let cancelled = false;
+    Promise.all([
+      getBoardingHouseConfig(),
+      getOccupancyStats(),
+      getUnpaidStats(),
+      getIssueStats(),
+      getUnpaidTenants(),
+    ])
+      .then(([configData, occupancyData, unpaidStatsData, issueStatsData, unpaidTenantsData]) => {
+        if (cancelled) return;
         setConfig(configData);
-        setRevenue(revenueData);
         setOccupancy(occupancyData);
         setUnpaidStats(unpaidStatsData);
         setIssueStats(issueStatsData);
         setUnpaidTenants(unpaidTenantsData);
-      } catch (err) {
+      })
+      .catch(() => {
+        if (cancelled) return;
         setError('Failed to load dashboard data.');
-      } finally {
-        setLoading(false);
-      }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
     };
-    loadData();
+  }, []);
+
+  useEffect(() => {
+    const cachedRevenue = revenueCache.current[selectedPeriod];
+    if (cachedRevenue) {
+      setRevenueError(null);
+      setRevenue(cachedRevenue);
+      setRevenueLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setRevenueError(null);
+    setRevenueLoading(true);
+    getRevenue(selectedPeriod)
+      .then((revenueData) => {
+        revenueCache.current[selectedPeriod] = revenueData;
+        if (!cancelled) setRevenue(revenueData);
+      })
+      .catch(() => {
+        if (!cancelled) setRevenueError('Failed to load revenue data.');
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setRevenueLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [selectedPeriod]);
 
   if (loading) return <ScreenSkeleton />;
   if (error) return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}><Text style={{ color: colors.danger, fontSize: 16 }}>{error}</Text></View>;
+  if (revenueError) return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}><Text style={{ color: colors.danger, fontSize: 16 }}>{revenueError}</Text></View>;
+  if (!revenue) return <ScreenSkeleton />;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -95,7 +138,10 @@ export default function OwnerDashboard() {
               </TouchableOpacity>
               <View style={{ alignItems: 'center' }}>
                 <Text style={{ fontSize: fs(10), color: colors.textMuted, fontWeight: '700', letterSpacing: 1 }}>VIEWING MONTH</Text>
-                <Text style={{ fontSize: fs(15), color: colors.text, fontWeight: '800', marginTop: 3 }}>{formatPeriod(selectedPeriod)}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                  <Text style={{ fontSize: fs(15), color: colors.text, fontWeight: '800' }}>{formatPeriod(selectedPeriod)}</Text>
+                  {revenueLoading && <ActivityIndicator size="small" color={colors.ownerAccent} />}
+                </View>
               </View>
               <TouchableOpacity accessibilityRole="button" accessibilityLabel="Next month" onPress={() => setSelectedPeriod((period) => shiftPeriod(period, 1))} style={{ width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg }}>
                 <Ionicons name="chevron-forward" size={20} color={colors.text} />
@@ -134,7 +180,7 @@ export default function OwnerDashboard() {
                   textTransform: 'uppercase',
                   marginBottom: 12,
                 }}>
-                  {formatPeriod(selectedPeriod)} revenue
+                  Cash received in {formatPeriod(selectedPeriod)}
                 </Text>
 
                 <Text style={{
@@ -151,7 +197,7 @@ export default function OwnerDashboard() {
                   color: 'rgba(255,255,255,0.6)',
                   marginBottom: 16,
                 }}>
-                  of ₱{revenue.expected.toLocaleString()} expected
+                  ₱{revenue.expected.toLocaleString()} billed this month
                 </Text>
 
                 {/* Progress bar */}
@@ -173,7 +219,7 @@ export default function OwnerDashboard() {
                 {/* Stats row */}
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   <Text style={{ fontSize: fs(12), fontWeight: '600', color: 'rgba(255,255,255,0.8)' }}>
-                    {revenue.percentCollected}% collected
+                    {revenue.percentCollected}% of this month's bills collected
                   </Text>
                   <Text style={{ fontSize: fs(12), fontWeight: '600', color: 'rgba(255,255,255,0.6)' }}>
                     ₱{revenue.outstanding.toLocaleString()} outstanding

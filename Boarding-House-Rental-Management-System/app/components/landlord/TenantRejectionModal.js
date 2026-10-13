@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Modal, Pressable, TouchableOpacity, ActivityIndicator, TextInput, Alert } from 'react-native';
+import { View, Text, Modal, Pressable, TouchableOpacity, ActivityIndicator, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../utils/ThemeContext';
 import { isMobile, fs } from '../../utils/responsive';
@@ -11,6 +11,7 @@ export default function TenantRejectionModal({ visible, tenant, onClose, onSucce
   const [rejectionReason, setRejectionReason] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [confirmationVisible, setConfirmationVisible] = useState(false);
 
   const handleReject = async () => {
     try {
@@ -27,44 +28,30 @@ export default function TenantRejectionModal({ visible, tenant, onClose, onSucce
         return;
       }
 
-      // Confirm rejection
-      Alert.alert(
-        'Confirm Rejection',
-        `Reject ${tenant.name}?\n\nReason: ${reason}\n\nThis action will notify the applicant.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Reject',
-            style: 'destructive',
-            onPress: async () => {
-              setSubmitting(true);
-              try {
-                await rejectTenant({
-                  tenantId: tenant.tenantId,
-                  rejectionReason: reason,
-                });
-
-                Alert.alert('Rejected', `${tenant.name}'s application has been rejected.`, [
-                  {
-                    text: 'OK',
-                    onPress: () => {
-                      setRejectionReason('');
-                      onSuccess();
-                    },
-                  },
-                ]);
-              } catch (err) {
-                console.error('Rejection error:', err);
-                setError(err.message || 'Failed to reject tenant. Please try again.');
-                setSubmitting(false);
-              }
-            },
-          },
-        ]
-      );
+      setConfirmationVisible(true);
     } catch (err) {
       console.error('Validation error:', err);
       setError('An error occurred. Please try again.');
+    }
+  };
+
+  const confirmRejection = async () => {
+    setSubmitting(true);
+    setError('');
+    try {
+      await rejectTenant({
+        tenantId: tenant.tenantId,
+        rejectionReason: rejectionReason.trim(),
+      });
+      setRejectionReason('');
+      setConfirmationVisible(false);
+      onSuccess?.();
+    } catch (err) {
+      console.error('Rejection error:', err);
+      setError(err.message || 'Failed to reject tenant. Please try again.');
+      setConfirmationVisible(false);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -124,7 +111,7 @@ export default function TenantRejectionModal({ visible, tenant, onClose, onSucce
           {/* Warning */}
           <View
             style={{
-              backgroundColor: colors.dangerBg,
+              backgroundColor: colors.infoBg,
               padding: 12,
               borderRadius: 8,
               marginBottom: 16,
@@ -132,8 +119,8 @@ export default function TenantRejectionModal({ visible, tenant, onClose, onSucce
               gap: 10,
             }}
           >
-            <Ionicons name="alert-circle" size={20} color={colors.dangerText} />
-            <Text style={{ fontSize: fs(13), color: colors.dangerText, flex: 1 }}>
+            <Ionicons name="alert-circle" size={20} color={colors.infoText} />
+            <Text style={{ fontSize: fs(13), color: colors.infoText, flex: 1 }}>
               The applicant will be notified of this decision.
             </Text>
           </View>
@@ -145,73 +132,89 @@ export default function TenantRejectionModal({ visible, tenant, onClose, onSucce
             </View>
           )}
 
-          {/* Rejection Reason */}
-          <Text style={{ fontSize: fs(14), fontWeight: '700', color: colors.text, marginBottom: 8 }}>
-            Reason for Rejection <Text style={{ color: colors.dangerText }}>*</Text>
-          </Text>
-          <TextInput
-            value={rejectionReason}
-            onChangeText={(v) => {
-              setRejectionReason(v);
-              setError('');
-            }}
-            placeholder="e.g., No available rooms at this time, incomplete documentation, etc."
-            placeholderTextColor={colors.textMuted}
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-            editable={!submitting}
-            style={{
-              backgroundColor: colors.bg,
-              borderWidth: 1,
-              borderColor: colors.cardBorder,
-              borderRadius: 8,
-              paddingHorizontal: 12,
-              paddingVertical: 12,
-              fontSize: fs(15),
-              color: colors.text,
-              marginBottom: 4,
-              minHeight: 100,
-            }}
-          />
-          <Text style={{ fontSize: fs(12), color: colors.textMuted, marginBottom: 20 }}>
-            {rejectionReason.length}/500 characters
-          </Text>
-
-          {/* Action Buttons */}
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            <TouchableOpacity
-              onPress={onClose}
-              disabled={submitting}
-              style={{
-                flex: 1,
-                backgroundColor: colors.bg,
-                paddingVertical: 14,
-                borderRadius: 12,
-                alignItems: 'center',
-              }}
-            >
-              <Text style={{ fontSize: fs(15), fontWeight: '700', color: colors.text }}>Cancel</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={handleReject}
-              disabled={submitting || !rejectionReason.trim()}
-              style={{
-                flex: 1,
-                backgroundColor: !rejectionReason.trim() ? colors.textMuted : colors.dangerText,
-                paddingVertical: 14,
-                borderRadius: 12,
-                alignItems: 'center',
-              }}
-            >
-              {submitting ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={{ fontSize: fs(15), fontWeight: '700', color: '#fff' }}>Reject Application</Text>
-              )}
-            </TouchableOpacity>
-          </View>
+          {confirmationVisible ? (
+            <>
+              <View style={{ backgroundColor: colors.bg, borderRadius: 10, padding: 14, marginBottom: 20 }}>
+                <Text style={{ fontSize: fs(15), fontWeight: '700', color: colors.text }}>
+                  Reject {tenant.name}'s application?
+                </Text>
+                <Text style={{ fontSize: fs(14), color: colors.textSecondary, marginTop: 8, lineHeight: 20 }}>
+                  Reason: {rejectionReason.trim()}
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  onPress={() => setConfirmationVisible(false)}
+                  disabled={submitting}
+                  style={{ flex: 1, minHeight: 48, backgroundColor: colors.bg, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <Text style={{ fontSize: fs(15), fontWeight: '700', color: colors.text }}>Go back</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  onPress={confirmRejection}
+                  disabled={submitting}
+                  style={{ flex: 1, minHeight: 48, backgroundColor: colors.dangerText, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}
+                >
+                  {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ fontSize: fs(15), fontWeight: '700', color: '#fff' }}>Confirm rejection</Text>}
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={{ fontSize: fs(14), fontWeight: '700', color: colors.text, marginBottom: 8 }}>
+                Reason for Rejection <Text style={{ color: colors.dangerText }}>*</Text>
+              </Text>
+              <TextInput
+                value={rejectionReason}
+                onChangeText={(value) => {
+                  setRejectionReason(value);
+                  setError('');
+                }}
+                placeholder="e.g., No available rooms at this time, incomplete documentation, etc."
+                placeholderTextColor={colors.textMuted}
+                multiline
+                numberOfLines={4}
+                maxLength={500}
+                textAlignVertical="top"
+                editable={!submitting}
+                style={{
+                  backgroundColor: colors.bg,
+                  borderWidth: 1,
+                  borderColor: colors.cardBorder,
+                  borderRadius: 8,
+                  paddingHorizontal: 12,
+                  paddingVertical: 12,
+                  fontSize: fs(15),
+                  color: colors.text,
+                  marginBottom: 4,
+                  minHeight: 100,
+                }}
+              />
+              <Text style={{ fontSize: fs(12), color: colors.textMuted, marginBottom: 20 }}>
+                {rejectionReason.length}/500 characters · at least 10 required
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  onPress={onClose}
+                  disabled={submitting}
+                  style={{ flex: 1, backgroundColor: colors.bg, paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}
+                >
+                  <Text style={{ fontSize: fs(15), fontWeight: '700', color: colors.text }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  onPress={handleReject}
+                  disabled={submitting || !rejectionReason.trim()}
+                  style={{ flex: 1, backgroundColor: !rejectionReason.trim() ? colors.textMuted : colors.dangerText, paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}
+                >
+                  <Text style={{ fontSize: fs(15), fontWeight: '700', color: '#fff' }}>Review rejection</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </Pressable>
       </Pressable>
     </Modal>

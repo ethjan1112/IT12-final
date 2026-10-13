@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../utils/ThemeContext';
+import TenantListPager from '../../components/landlord/TenantListPager';
 import {
   isMobile,
   isDesktop,
@@ -28,14 +29,12 @@ export default function RoomsScreen() {
   const { colors } = useTheme();
   const [filter, setFilter] = useState('all');
   const [roomPage, setRoomPage] = useState(0);
-  const [roomsViewportWidth, setRoomsViewportWidth] = useState(0);
   const roomsPerPage = 4;
   const padding = getResponsivePadding();
   const containerMaxWidth = isDesktop ? 1180 : '100%';
 
   const columns = getGridColumns();
   const gap = spacing.sm;
-  const roomsScrollRef = useRef(null);
 
   // Responsive card width calculation based on columns
   const getCardWidth = () => {
@@ -179,15 +178,12 @@ export default function RoomsScreen() {
     return true;
   });
   const pageCount = Math.ceil(filteredRooms.length / roomsPerPage);
-  const pageTotal = Math.max(1, pageCount);
 
   const goToRoomPage = (page) => {
     const nextPage = Math.max(0, Math.min(pageCount - 1, page));
     setRoomPage(nextPage);
-    if (roomsViewportWidth > 0) {
-      roomsScrollRef.current?.scrollTo({ x: nextPage * roomsViewportWidth, animated: true });
-    }
   };
+  const pageRooms = filteredRooms.slice(roomPage * roomsPerPage, (roomPage + 1) * roomsPerPage);
 
   useEffect(() => {
     if (roomPage >= pageCount && roomPage > 0) {
@@ -339,32 +335,10 @@ export default function RoomsScreen() {
 
       {/* Room Grid */}
       <View style={{ flex: 1, paddingHorizontal: padding, alignItems: isDesktop ? 'center' : 'stretch' }}>
-        <ScrollView
-          style={{ flex: 1, width: '100%' }}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ alignItems: isDesktop ? 'center' : 'stretch', paddingBottom: 12 }}
-        >
-        <View
-          onLayout={(event) => setRoomsViewportWidth(event.nativeEvent.layout.width)}
-          style={{ maxWidth: containerMaxWidth, width: '100%' }}
-        >
-          <ScrollView
-            ref={roomsScrollRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={(event) => {
-              if (roomsViewportWidth > 0) {
-                setRoomPage(Math.round(event.nativeEvent.contentOffset.x / roomsViewportWidth));
-              }
-            }}
-          >
-            {Array.from({ length: pageTotal }, (_, pageIndex) => {
-              const pageRooms = filteredRooms.slice(pageIndex * roomsPerPage, (pageIndex + 1) * roomsPerPage);
-              return (
-                <View key={`room-page-${pageIndex}`} style={{ width: roomsViewportWidth || '100%' }}>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap }}>
-                    {pageRooms.map((room) => {
+        <View style={{ flex: 1, width: '100%', alignItems: isDesktop ? 'center' : 'stretch', overflow: 'hidden' }}>
+        <View style={{ maxWidth: containerMaxWidth, width: '100%' }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap }}>
+            {pageRooms.map((room) => {
             const statusColor = getStatusColor(room.status);
             const isVacant = room.status === 'vacant';
 
@@ -474,12 +448,8 @@ export default function RoomsScreen() {
                 </View>
               </View>
             );
-                    })}
-                  </View>
-                </View>
-              );
             })}
-          </ScrollView>
+          </View>
           {filteredRooms.length === 0 && (
             <View style={{ ...cardStyle, width: '100%', backgroundColor: colors.card, borderColor: colors.cardBorder, padding: 28, alignItems: 'center' }}>
               <Ionicons name={rooms.length === 0 ? 'bed-outline' : 'filter-outline'} size={38} color={colors.ownerAccent} />
@@ -494,24 +464,17 @@ export default function RoomsScreen() {
               </TouchableOpacity>
             </View>
           )}
-          {pageCount > 0 && (
-            <View style={{ minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 }} accessibilityRole="adjustable" accessibilityLabel={`Room page ${roomPage + 1} of ${pageCount}`}>
-              {Array.from({ length: pageCount }, (_, pageIndex) => (
-                <TouchableOpacity
-                  key={`room-page-dot-${pageIndex}`}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Show rooms ${pageIndex * roomsPerPage + 1} to ${Math.min((pageIndex + 1) * roomsPerPage, filteredRooms.length)}`}
-                  accessibilityState={{ selected: roomPage === pageIndex }}
-                  onPress={() => goToRoomPage(pageIndex)}
-                  style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}
-                >
-                  <View style={{ width: roomPage === pageIndex ? 11 : 8, height: roomPage === pageIndex ? 11 : 8, borderRadius: 99, backgroundColor: roomPage === pageIndex ? colors.ownerAccent : colors.cardBorder }} />
-                </TouchableOpacity>
-              ))}
-            </View>
+          {filteredRooms.length > 0 && (
+            <TenantListPager
+              page={roomPage}
+              pageSize={roomsPerPage}
+              totalCount={filteredRooms.length}
+              onPageChange={goToRoomPage}
+              colors={colors}
+            />
           )}
         </View>
-        </ScrollView>
+        </View>
       </View>
 
       {/* Legend */}

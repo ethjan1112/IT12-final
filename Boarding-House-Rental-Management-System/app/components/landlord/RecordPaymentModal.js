@@ -1,9 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Modal, TouchableOpacity, ActivityIndicator, TextInput, ScrollView, Alert } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, ActivityIndicator, TextInput, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../utils/ThemeContext';
 import { isMobile, fs } from '../../utils/responsive';
 import { recordPayment, getTenantFinancialSummary, getNextUnpaidInvoiceForTenant } from '../../services/dataService';
+
+function getLocalDateString(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 export default function RecordPaymentModal({ visible, tenant, onClose, onSuccess }) {
   const { colors } = useTheme();
@@ -14,13 +21,14 @@ export default function RecordPaymentModal({ visible, tenant, onClose, onSuccess
   const [invoiceBalance, setInvoiceBalance] = useState(0);
   
   const [amount, setAmount] = useState('');
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]); // YYYY-MM-DD format
+  const [paymentDate, setPaymentDate] = useState(getLocalDateString());
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [referenceNo, setReferenceNo] = useState('');
   const [notes, setNotes] = useState('');
   
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     if (visible && tenant) {
@@ -32,25 +40,29 @@ export default function RecordPaymentModal({ visible, tenant, onClose, onSuccess
     try {
       setLoading(true);
       setError('');
+      setConfirming(false);
       setLatestInvoiceId(null);
       setInvoiceBalance(0);
       setAmount('');
+      setReferenceNo('');
+      setNotes('');
+      setPaymentDate(getLocalDateString());
       
       // Get tenant's outstanding balance and latest invoice
       const [summary, invoice] = await Promise.all([
         getTenantFinancialSummary(tenant.tenantId),
         getNextUnpaidInvoiceForTenant(tenant.tenantId),
       ]);
-      setOutstandingBalance(summary.outstandingBalance || 0);
+      setOutstandingBalance(Number(summary.outstandingBalance) || 0);
       setLatestInvoiceId(invoice?.id || null);
-      setInvoiceBalance(invoice?.balance || 0);
-      setAmount(invoice ? String(invoice.balance) : '');
+      setInvoiceBalance(Number(invoice?.balance) || 0);
+      setAmount(invoice ? String(Number(invoice.balance) || 0) : '');
       if (!invoice) setError('This tenant has no unpaid invoice to record a payment against.');
     } catch (err) {
       console.error('Error loading balance:', err);
       setError('Failed to load balance information.');
       setOutstandingBalance(tenant.balance || 0);
-      setAmount(String(tenant.balance || 0));
+      setAmount('');
     } finally {
       setLoading(false);
     }
@@ -59,85 +71,92 @@ export default function RecordPaymentModal({ visible, tenant, onClose, onSuccess
   const handleDateChange = (dateString) => {
     setPaymentDate(dateString);
     setError('');
+    setConfirming(false);
   };
 
-  const handleRecordPayment = async () => {
-    try {
-      setError('');
-
-      // Validation
-      const paymentAmount = parseFloat(amount);
-      if (isNaN(paymentAmount) || paymentAmount <= 0) {
-        setError('Please enter a valid payment amount greater than zero');
-        return;
-      }
-
-      const selectedDate = new Date(`${paymentDate}T00:00:00`);
-      if (Number.isNaN(selectedDate.getTime())) {
-        setError('Enter a valid payment date in YYYY-MM-DD format.');
-        return;
-      }
-      if (paymentAmount > invoiceBalance) {
-        setError(`Payment cannot exceed this invoice's remaining balance of ${invoiceBalance.toLocaleString()}.`);
-        return;
-      }
-      const today = new Date();
-      today.setHours(23, 59, 59, 999);
-      if (selectedDate > today) {
-        setError('Payment date cannot be in the future');
-        return;
-      }
-
-      if (!latestInvoiceId) {
-        setError('No unpaid invoice is available for this tenant.');
-        return;
-      }
-
-      if (!paymentMethod) {
-        setError('Please select a payment method');
-        return;
-      }
-
-      // Confirm payment
-      const displayDate = new Date(paymentDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      
-      Alert.alert(
-        'Confirm Payment',
-        `Record payment for ${tenant.name}?\n\nAmount: ₱${paymentAmount.toLocaleString()}\nDate: ${displayDate}\nMethod: ${paymentMethod.toUpperCase()}\n${referenceNo ? `Reference: ${referenceNo}\n` : ''}${notes ? `Notes: ${notes}` : ''}`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Record',
-            onPress: async () => {
-              setSubmitting(true);
-              try {
-                await recordPayment({
-                  invoiceId: latestInvoiceId,
-                  amountPaid: paymentAmount,
-                  paymentDate: paymentDate,
-                  paymentMethod,
-                  referenceNo: referenceNo.trim(),
-                  notes: notes.trim(),
-                });
-
-                Alert.alert(
-                  'Success',
-                  `Payment of ₱${paymentAmount.toLocaleString()} has been recorded successfully.`,
-                  [{ text: 'OK', onPress: onSuccess }]
-                );
-              } catch (err) {
-                console.error('Payment recording error:', err);
-                setError(err.message || 'Failed to record payment. Please try again.');
-                setSubmitting(false);
-              }
-            },
-          },
-        ]
-      );
-    } catch (err) {
-      console.error('Validation error:', err);
-      setError('An error occurred. Please try again.');
+  const validatePayment = () => {
+    const normalizedAmount = amount.trim();
+    if (!/^\d+(\.\d{1,2})?$/.test(normalizedAmount)) {
+      setError('Enter a valid amount using up to two decimal places.');
+      return null;
     }
+
+    const paymentAmount = Number(normalizedAmount);
+    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+      setError('Please enter a valid payment amount greater than zero.');
+      return null;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate)) {
+      setError('Enter a valid payment date in YYYY-MM-DD format.');
+      return null;
+    }
+
+    const [year, month, day] = paymentDate.split('-').map(Number);
+    const selectedDate = new Date(year, month - 1, day);
+    if (selectedDate.getFullYear() !== year || selectedDate.getMonth() !== month - 1 || selectedDate.getDate() !== day) {
+      setError('Enter a valid payment date in YYYY-MM-DD format.');
+      return null;
+    }
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    if (selectedDate > today) {
+      setError('Payment date cannot be in the future.');
+      return null;
+    }
+    if (paymentAmount > invoiceBalance) {
+      setError(`Payment cannot exceed this invoice's remaining balance of ${invoiceBalance.toLocaleString()}.`);
+      return null;
+    }
+    if (!latestInvoiceId) {
+      setError('No unpaid invoice is available for this tenant.');
+      return null;
+    }
+    if (paymentMethod !== 'cash') {
+      setError('Please select a supported payment method.');
+      return null;
+    }
+    return paymentAmount;
+  };
+
+  const handleReviewPayment = () => {
+    setError('');
+    if (validatePayment() !== null) setConfirming(true);
+  };
+
+  const handleConfirmPayment = async () => {
+    const paymentAmount = validatePayment();
+    if (paymentAmount === null) {
+      setConfirming(false);
+      return;
+    }
+
+    setSubmitting(true);
+    setError('');
+    try {
+      await recordPayment({
+        invoiceId: latestInvoiceId,
+        amountPaid: paymentAmount,
+        paymentDate,
+        paymentMethod,
+        referenceNo: referenceNo.trim(),
+        notes: notes.trim(),
+      });
+      setSubmitting(false);
+      setConfirming(false);
+      onSuccess?.();
+    } catch (err) {
+      console.error('Payment recording error:', err);
+      setError(err.message || 'Failed to record payment. Please try again.');
+      setConfirming(false);
+      setSubmitting(false);
+    }
+  };
+
+  const handleRecordPayment = () => {
+    if (confirming) {
+      return handleConfirmPayment();
+    }
+    handleReviewPayment();
   };
 
   const paymentMethods = [
@@ -216,9 +235,18 @@ export default function RecordPaymentModal({ visible, tenant, onClose, onSuccess
           </View>
 
           {/* Error Display */}
-          {error && (
+          {!!error && (
             <View style={{ backgroundColor: colors.dangerBg, padding: 12, borderRadius: 8, marginBottom: 16 }}>
               <Text style={{ fontSize: fs(14), color: colors.dangerText, fontWeight: '600' }}>{error}</Text>
+            </View>
+          )}
+
+          {confirming && !loading && (
+            <View style={{ backgroundColor: colors.accentBg, padding: 12, borderRadius: 8, marginBottom: 16 }}>
+              <Text style={{ fontSize: fs(14), color: colors.text, fontWeight: '700', marginBottom: 4 }}>Confirm payment</Text>
+              <Text style={{ fontSize: fs(13), color: colors.textSecondary }}>
+                Record ₱{Number(amount).toLocaleString()} in cash for {tenant.name} on {paymentDate}?
+              </Text>
             </View>
           )}
 
@@ -239,6 +267,7 @@ export default function RecordPaymentModal({ visible, tenant, onClose, onSuccess
                   onChangeText={(v) => {
                     setAmount(v);
                     setError('');
+                    setConfirming(false);
                   }}
                   placeholder="0.00"
                   placeholderTextColor={colors.textMuted}
@@ -280,7 +309,7 @@ export default function RecordPaymentModal({ visible, tenant, onClose, onSuccess
                   }}
                 />
                 <Text style={{ fontSize: fs(12), color: colors.textMuted, marginTop: -12, marginBottom: 16 }}>
-                  Format: YYYY-MM-DD (e.g., {new Date().toISOString().split('T')[0]})
+                  Format: YYYY-MM-DD (e.g., {getLocalDateString()})
                 </Text>
 
                 {/* Payment Method */}
@@ -403,7 +432,7 @@ export default function RecordPaymentModal({ visible, tenant, onClose, onSuccess
               disabled={submitting || loading || !amount || !latestInvoiceId}
               style={{
                 flex: 1,
-                backgroundColor: !amount ? colors.textMuted : colors.accent,
+                backgroundColor: !amount || loading || !latestInvoiceId ? colors.textMuted : colors.accent,
                 paddingVertical: 14,
                 borderRadius: 12,
                 alignItems: 'center',
@@ -412,7 +441,9 @@ export default function RecordPaymentModal({ visible, tenant, onClose, onSuccess
               {submitting ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text style={{ fontSize: fs(15), fontWeight: '700', color: '#fff' }}>Record Payment</Text>
+                <Text style={{ fontSize: fs(15), fontWeight: '700', color: '#fff' }}>
+                  {confirming ? 'Confirm Payment' : 'Review Payment'}
+                </Text>
               )}
             </TouchableOpacity>
           </View>

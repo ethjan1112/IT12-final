@@ -57,7 +57,8 @@ export default function OwnerReports() {
 
   // Summary items with color coding
   const summaryItems = [
-    { label: 'Rent Billed', value: `₱${summary.rentCollected.toLocaleString()}`, color: colors.success },
+    { label: 'Cash Received', value: `₱${summary.cashReceived.toLocaleString()}`, color: colors.success },
+    { label: 'Rent Billed', value: `₱${summary.rentBilled.toLocaleString()}`, color: colors.text },
     { label: 'Unpaid Balance', value: `₱${summary.unpaidBalance.toLocaleString()}`, color: colors.danger },
     { label: 'Electricity Billed', value: `₱${summary.electricityFees.toLocaleString()}`, color: colors.warning },
     { label: 'Occupied Rooms (current)', value: `${summary.occupiedRooms} / ${summary.totalRooms}`, color: colors.text },
@@ -119,7 +120,7 @@ export default function OwnerReports() {
                 textTransform: 'uppercase',
                 marginBottom: 24,
               }}>
-                Monthly Income (₱)
+                Cash Received (₱)
               </Text>
 
               {/* Bar chart */}
@@ -133,7 +134,9 @@ export default function OwnerReports() {
                 {monthlyIncome.map((item, index) => {
                   const barHeight = (item.amount / maxAmount) * maxBarHeight;
                   const isCurrent = index === currentMonthIndex;
-                  const amountLabel = `${Math.round(item.amount / 1000)}k`;
+                  const amountLabel = item.amount >= 1000
+                    ? `${(item.amount / 1000).toLocaleString('en-PH', { maximumFractionDigits: 1 })}k`
+                    : Math.round(item.amount).toLocaleString('en-PH');
 
                   return (
                     <View

@@ -3,16 +3,20 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../utils/ThemeContext';
-import { isMobile, getResponsivePadding, fs, spacing, cardStyle, safeAreaTop } from '../../utils/responsive';
+import { isMobile, getResponsivePadding, fs, spacing, cardStyle } from '../../utils/responsive';
 import { getPendingTenantRegistrations } from '../../services/dataService';
 import TenantApprovalModal from '../../components/landlord/TenantApprovalModal';
 import TenantRejectionModal from '../../components/landlord/TenantRejectionModal';
+import TenantListPager from '../../components/landlord/TenantListPager';
+
+const TENANTS_PER_PAGE = 5;
 
 export default function PendingApprovalsScreen() {
   const { colors } = useTheme();
   const padding = getResponsivePadding();
   
   const [pendingTenants, setPendingTenants] = useState([]);
+  const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
@@ -67,6 +71,12 @@ export default function PendingApprovalsScreen() {
     loadPendingTenants();
   };
 
+  const handleModalClose = () => {
+    setApprovalModalVisible(false);
+    setRejectionModalVisible(false);
+    setSelectedTenant(null);
+  };
+
   const formatDate = (dateStr) => {
     try {
       const date = new Date(dateStr);
@@ -75,6 +85,13 @@ export default function PendingApprovalsScreen() {
       return dateStr;
     }
   };
+
+  const pageCount = Math.max(1, Math.ceil(pendingTenants.length / TENANTS_PER_PAGE));
+  const visibleTenants = pendingTenants.slice(page * TENANTS_PER_PAGE, (page + 1) * TENANTS_PER_PAGE);
+
+  useEffect(() => {
+    setPage((currentPage) => Math.min(currentPage, pageCount - 1));
+  }, [pageCount]);
 
   if (loading) return <ScreenSkeleton />;
 
@@ -111,11 +128,21 @@ export default function PendingApprovalsScreen() {
               <Ionicons name="alert-circle" size={20} color={colors.dangerText} />
               <Text style={{ fontSize: fs(14), color: colors.dangerText, fontWeight: '600', flex: 1 }}>{error}</Text>
             </View>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Retry loading tenant applications"
+              disabled={refreshing}
+              onPress={onRefresh}
+              style={{ alignSelf: 'flex-start', marginTop: 12, minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 8, opacity: refreshing ? 0.6 : 1 }}
+            >
+              {refreshing ? <ActivityIndicator size="small" color={colors.dangerText} /> : <Ionicons name="refresh" size={17} color={colors.dangerText} />}
+              <Text style={{ fontSize: fs(13), fontWeight: '700', color: colors.dangerText }}>{refreshing ? 'Retrying…' : 'Try again'}</Text>
+            </TouchableOpacity>
           </View>
         )}
 
         {/* Pending Tenants List */}
-        {pendingTenants.length === 0 ? (
+        {pendingTenants.length === 0 && !error ? (
           <View style={{ ...cardStyle, backgroundColor: colors.card, borderColor: colors.cardBorder, padding: 48, alignItems: 'center' }}>
             <Ionicons name="checkmark-done-circle-outline" size={64} color={colors.textMuted} />
             <Text style={{ fontSize: fs(18), fontWeight: '700', color: colors.text, marginTop: 16 }}>All Caught Up!</Text>
@@ -123,9 +150,17 @@ export default function PendingApprovalsScreen() {
               No pending tenant approvals at this time.
             </Text>
           </View>
-        ) : (
-          <View style={{ gap: spacing.md }}>
-            {pendingTenants.map((tenant) => (
+        ) : pendingTenants.length > 0 ? (
+          <>
+            <TenantListPager
+              page={page}
+              pageSize={TENANTS_PER_PAGE}
+              totalCount={pendingTenants.length}
+              onPageChange={setPage}
+              colors={colors}
+            />
+            <View style={{ gap: spacing.md }}>
+            {visibleTenants.map((tenant) => (
               <View
                 key={tenant.id}
                 style={{
@@ -217,8 +252,9 @@ export default function PendingApprovalsScreen() {
                 </View>
               </View>
             ))}
-          </View>
-        )}
+            </View>
+          </>
+        ) : null}
       </ScrollView>
 
       {/* Modals */}
@@ -227,14 +263,14 @@ export default function PendingApprovalsScreen() {
           <TenantApprovalModal
             visible={approvalModalVisible}
             tenant={selectedTenant}
-            onClose={() => setApprovalModalVisible(false)}
+            onClose={handleModalClose}
             onSuccess={handleApprovalSuccess}
           />
 
           <TenantRejectionModal
             visible={rejectionModalVisible}
             tenant={selectedTenant}
-            onClose={() => setRejectionModalVisible(false)}
+            onClose={handleModalClose}
             onSuccess={handleRejectionSuccess}
           />
         </>

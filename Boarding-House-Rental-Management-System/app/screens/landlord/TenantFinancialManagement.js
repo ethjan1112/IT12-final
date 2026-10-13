@@ -6,12 +6,16 @@ import { useTheme } from '../../utils/ThemeContext';
 import { isMobile, getResponsivePadding, fs, spacing, cardStyle, safeAreaTop } from '../../utils/responsive';
 import { getTenantsWithFinancialStatus } from '../../services/dataService';
 import RecordPaymentModal from '../../components/landlord/RecordPaymentModal';
+import TenantListPager from '../../components/landlord/TenantListPager';
+
+const TENANTS_PER_PAGE = 5;
 
 export default function TenantFinancialManagement({ navigation, pendingPaymentProofCount = 0, initialFilter = 'all' }) {
   const { colors } = useTheme();
   const padding = getResponsivePadding();
 
   const [tenants, setTenants] = useState([]);
+  const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
@@ -29,6 +33,7 @@ export default function TenantFinancialManagement({ navigation, pendingPaymentPr
     } catch (err) {
       console.error('Error loading tenants:', err);
       setError('Failed to load tenant financial data. Please try again.');
+      setTenants([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -39,6 +44,13 @@ export default function TenantFinancialManagement({ navigation, pendingPaymentPr
     loadTenants(activeFilter);
   }, [activeFilter]);
 
+  const pageCount = Math.max(1, Math.ceil(tenants.length / TENANTS_PER_PAGE));
+  const visibleTenants = tenants.slice(page * TENANTS_PER_PAGE, (page + 1) * TENANTS_PER_PAGE);
+
+  useEffect(() => {
+    setPage((currentPage) => Math.min(currentPage, pageCount - 1));
+  }, [pageCount]);
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadTenants(activeFilter);
@@ -46,6 +58,7 @@ export default function TenantFinancialManagement({ navigation, pendingPaymentPr
 
   const handleFilterChange = (filter) => {
     setActiveFilter(filter);
+    setPage(0);
     setLoading(true);
   };
 
@@ -61,6 +74,7 @@ export default function TenantFinancialManagement({ navigation, pendingPaymentPr
   const handlePaymentSuccess = () => {
     setPaymentModalVisible(false);
     setSelectedTenant(null);
+    setRefreshing(true);
     loadTenants(activeFilter);
   };
 
@@ -203,8 +217,16 @@ export default function TenantFinancialManagement({ navigation, pendingPaymentPr
             </Text>
           </View>
         ) : (
-          <View style={{ gap: spacing.md }}>
-            {tenants.map((tenant) => {
+          <>
+            <TenantListPager
+              page={page}
+              pageSize={TENANTS_PER_PAGE}
+              totalCount={tenants.length}
+              onPageChange={setPage}
+              colors={colors}
+            />
+            <View style={{ gap: spacing.md }}>
+            {visibleTenants.map((tenant) => {
               const statusColors = getStatusColor(tenant.status);
               return (
                 <View
@@ -307,9 +329,10 @@ export default function TenantFinancialManagement({ navigation, pendingPaymentPr
 
                     <TouchableOpacity
                       onPress={() => handleRecordPayment(tenant)}
+                      disabled={tenant.balance <= 0}
                       style={{
                         flex: 1,
-                        backgroundColor: colors.accent,
+                        backgroundColor: tenant.balance > 0 ? colors.accent : colors.textMuted,
                         paddingVertical: 12,
                         borderRadius: 10,
                         alignItems: 'center',
@@ -319,13 +342,16 @@ export default function TenantFinancialManagement({ navigation, pendingPaymentPr
                       }}
                     >
                       <Ionicons name="cash-outline" size={18} color="#fff" />
-                      <Text style={{ fontSize: fs(14), fontWeight: '700', color: '#fff' }}>Record Payment</Text>
+                      <Text style={{ fontSize: fs(14), fontWeight: '700', color: '#fff' }}>
+                        {tenant.balance > 0 ? 'Record Payment' : 'Paid'}
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 </View>
               );
             })}
-          </View>
+            </View>
+          </>
         )}
       </ScrollView>
 

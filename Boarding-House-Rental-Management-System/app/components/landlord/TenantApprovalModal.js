@@ -10,6 +10,7 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
 
   const [vacantRooms, setVacantRooms] = useState([]);
   const [loadingRooms, setLoadingRooms] = useState(true);
+  const [roomLoadFailed, setRoomLoadFailed] = useState(false);
   const [selectedRoomId, setSelectedRoomId] = useState('');
   const [monthlyRent, setMonthlyRent] = useState('');
   const [dueDay, setDueDay] = useState('5');
@@ -32,6 +33,7 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
   const loadVacantRooms = async () => {
     try {
       setLoadingRooms(true);
+      setRoomLoadFailed(false);
       setError('');
       const rooms = await getVacantRoomsForAssignment();
       setVacantRooms(rooms);
@@ -46,7 +48,8 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
       }
     } catch (err) {
       console.error('Error loading vacant rooms:', err);
-      setError('Failed to load available rooms.');
+      setRoomLoadFailed(true);
+      setError(err.message || 'Failed to load available rooms.');
     } finally {
       setLoadingRooms(false);
     }
@@ -232,8 +235,18 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
               >
                 <Ionicons name="bed-outline" size={32} color={colors.textMuted} />
                 <Text style={{ fontSize: fs(14), color: colors.textMuted, marginTop: 8, textAlign: 'center' }}>
-                  No vacant rooms available.
+                  {roomLoadFailed ? 'Could not load vacant rooms.' : 'No vacant rooms available.'}
                 </Text>
+                {roomLoadFailed && (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    onPress={loadVacantRooms}
+                    disabled={loadingRooms || submitting}
+                    style={{ minHeight: 40, marginTop: 12, paddingHorizontal: 16, borderRadius: 999, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <Text style={{ color: '#fff', fontSize: fs(13), fontWeight: '700' }}>Retry loading rooms</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ) : (
               <View style={{ backgroundColor: colors.bg, borderRadius: 12, marginBottom: 16, overflow: 'hidden' }}>
@@ -241,6 +254,9 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
                   <TouchableOpacity
                     key={room.id}
                     onPress={() => handleRoomSelect(room)}
+                    disabled={submitting || loadingRooms}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: selectedRoomId === room.id, disabled: submitting || loadingRooms }}
                     style={{
                       flexDirection: 'row',
                       justifyContent: 'space-between',
@@ -249,6 +265,7 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
                       borderBottomWidth: index < vacantRooms.length - 1 ? 1 : 0,
                       borderBottomColor: colors.cardBorder,
                       backgroundColor: selectedRoomId === room.id ? colors.accentBg : 'transparent',
+                      opacity: submitting || loadingRooms ? 0.6 : 1,
                     }}
                   >
                     <View style={{ flex: 1 }}>
