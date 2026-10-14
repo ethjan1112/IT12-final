@@ -4,9 +4,9 @@ import { View, Text, ScrollView, TouchableOpacity, RefreshControl, ActivityIndic
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../utils/ThemeContext';
 import { isMobile, getResponsivePadding, fs, spacing, cardStyle, safeAreaTop } from '../../utils/responsive';
-import { getTenantNotifications, markNotificationAsRead, getAnnouncements } from '../../services/dataService';
+import { getTenantNotifications, markNotificationAsRead, dismissTenantNotification, getAnnouncements } from '../../services/dataService';
 import AnnouncementDetailsModal from '../../components/AnnouncementDetailsModal';
-import { getLastSeen, markAnnouncementsSeen, getAnnouncementTime } from '../../utils/announcementSeen';
+import { getLastSeen, markAnnouncementsSeen, getAnnouncementTime, getDismissedAnnouncementIds, dismissAnnouncement } from '../../utils/announcementSeen';
 
 const timeOf = (item) => {
   const parsed = Date.parse(item.created_at);
@@ -28,10 +28,11 @@ export default function TenantNotificationsScreen({ user }) {
       setError(null);
       const tenantId = user?.tenant_id || user?.room || '2';
       const uid = user?.uid || user?.tenant_id;
-      const [data, announcements, lastSeen] = await Promise.all([
+      const [data, announcements, lastSeen, dismissedAnnouncementIds] = await Promise.all([
         getTenantNotifications(tenantId),
         getAnnouncements().catch(() => []),
         getLastSeen(uid),
+        getDismissedAnnouncementIds(uid),
       ]);
       const announcementItems = (announcements || []).map((announcement) => {
         const time = getAnnouncementTime(announcement);
@@ -46,7 +47,8 @@ export default function TenantNotificationsScreen({ user }) {
           announcement,
         };
       });
-      setNotifications([...(data || []), ...announcementItems].sort((a, b) => timeOf(b) - timeOf(a)));
+      const visibleAnnouncements = announcementItems.filter((item) => !dismissedAnnouncementIds.includes(item.id));
+      setNotifications([...(data || []), ...visibleAnnouncements].sort((a, b) => timeOf(b) - timeOf(a)));
       markAnnouncementsSeen(uid, announcements || []);
     } catch (err) {
       console.error('Error loading notifications:', err);
@@ -80,6 +82,21 @@ export default function TenantNotificationsScreen({ user }) {
       }
     } catch (err) {
       console.error('Error marking notification as read:', err);
+    }
+  };
+
+  const handleDismissNotification = async (notification, event) => {
+    event?.stopPropagation?.();
+    setNotifications((current) => current.filter((item) => item.id !== notification.id));
+    try {
+      if (notification.type === 'announcement') {
+        await dismissAnnouncement(user?.uid || user?.tenant_id, notification.id);
+      } else {
+        await dismissTenantNotification(notification.id);
+      }
+    } catch (err) {
+      console.error('Error dismissing notification:', err);
+      loadNotifications();
     }
   };
 
@@ -267,8 +284,18 @@ export default function TenantNotificationsScreen({ user }) {
                           borderRadius: 20,
                           overflow: 'hidden',
                           padding: 16,
+                          paddingTop: 34,
                         }}
                       >
+                        <TouchableOpacity
+                          accessibilityRole="button"
+                          accessibilityLabel={`Dismiss ${notification.title || 'notification'}`}
+                          onPress={(event) => handleDismissNotification(notification, event)}
+                          hitSlop={8}
+                          style={{ position: 'absolute', top: 8, right: 8, zIndex: 2, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg }}
+                        >
+                          <Ionicons name="close" size={15} color={colors.textMuted} />
+                        </TouchableOpacity>
                         {/* Top row: icon, category tag, time */}
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                           <View

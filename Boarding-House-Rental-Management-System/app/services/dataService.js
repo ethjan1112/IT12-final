@@ -156,7 +156,19 @@ function getInvoiceTotalAmount(invoice) {
   const total = Number(invoice?.total_amount) || 0;
   const water = Number(invoice?.water_charge) || 0;
   const securityDeposit = invoice?.invoice_type === 'initial' ? Number(invoice.security_deposit) || 0 : 0;
+  const currentPeriod = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+  if (invoice?.billing_period === currentPeriod) {
+    return Math.max(0, (Number(invoice.rent_charge) || 0) + (Number(invoice.utility_charge) || 0) + 100 - water - securityDeposit);
+  }
   return Math.max(0, total - water - securityDeposit);
+}
+
+const WIFI_CHARGE = { id: 'wifi', label: 'Wi-Fi', amount: 100 };
+
+function addDaysToDate(date, days) {
+  const result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  result.setDate(result.getDate() + days);
+  return result;
 }
 
 function toMoney(value) {
@@ -1049,11 +1061,13 @@ export async function getTenantBillingBreakdown(id = '2') {
         securityDeposit: 0,
         invoiceType: invoice.invoice_type || 'monthly',
         water: 0,
-        additionalCharges: Array.isArray(invoice.additional_charges)
-          ? invoice.additional_charges
-          : Number(invoice.other_charges || 0) > 0
-            ? [{ id: 'legacy-other', label: 'Other charges', amount: Number(invoice.other_charges) }]
-            : [],
+        additionalCharges: invoice.billing_period === `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
+          ? [WIFI_CHARGE]
+          : Array.isArray(invoice.additional_charges)
+            ? invoice.additional_charges
+            : Number(invoice.other_charges || 0) > 0
+              ? [{ id: 'legacy-other', label: 'Other charges', amount: Number(invoice.other_charges) }]
+              : [],
         totalDue,
         dueDate: invoice.due_date,
         paidAmount,
@@ -1378,11 +1392,8 @@ export async function getUtilityBills() {
       const electricity = invoice?.utility_charge ?? electricityResult.amount;
       const water = 0;
       const rent = invoice?.rent_charge ?? lease.agreed_monthly_rent ?? roomType?.base_rent ?? 0;
-      const additionalCharges = Array.isArray(invoice?.additional_charges)
-        ? invoice.additional_charges
-        : Number(invoice?.other_charges || 0) > 0
-          ? [{ id: 'legacy-other', label: 'Other charges', amount: Number(invoice.other_charges) }]
-          : [];
+      const isCurrentBillingPeriod = (invoice?.billing_period || reading?.billing_period || billingPeriod) === currentPeriod;
+      const additionalCharges = isCurrentBillingPeriod ? [WIFI_CHARGE] : [];
       const additionalTotal = additionalCharges.reduce((sum, charge) => sum + Number(charge.amount || 0), 0);
       const invoiceTotal = invoice ? getInvoiceTotalAmount(invoice) : rent + electricity + additionalTotal;
       const invoicePaid = invoice
@@ -1422,7 +1433,7 @@ export async function getUtilityBills() {
 }
 
 /** Update an existing utility bill or create the period invoice for an active lease. */
-export async function updateUtilityBill({ invoiceId, leaseId, billingPeriod, monthlyRent, consumedKwh, ratePerKwh, additionalCharges = [] }) {
+export async function updateUtilityBill({ invoiceId, leaseId, billingPeriod, monthlyRent, consumedKwh, ratePerKwh }) {
   if (!invoiceId && !leaseId) throw new Error('Select a room before creating its bill.');
   if ([monthlyRent, consumedKwh, ratePerKwh].some((value) => String(value).trim() === '')) {
     throw new Error('Enter rent, total kWh consumed, and the rate per kWh. Use 0 if a value does not apply.');
@@ -1431,20 +1442,6 @@ export async function updateUtilityBill({ invoiceId, leaseId, billingPeriod, mon
   if (values.some((value) => !Number.isFinite(value) || value < 0)) {
     throw new Error('Rent, kWh consumed, and the rate per kWh must be valid non-negative amounts.');
   }
-  const chargesInput = additionalCharges || [];
-  if (chargesInput.some((charge) => String(charge.label || '').trim() === '' || String(charge.amount ?? '').trim() === '')) {
-    throw new Error('Each additional charge needs a description and a valid non-negative amount.');
-  }
-  const normalizedCharges = chargesInput.map((charge) => ({
-    id: String(charge.id || `charge-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`),
-    label: String(charge.label || '').trim(),
-    amount: Number(charge.amount),
-  }));
-  if (normalizedCharges.some((charge) => !Number.isFinite(charge.amount) || charge.amount < 0)) {
-    throw new Error('Each additional charge needs a description and a valid non-negative amount.');
-  }
-  const additionalTotal = normalizedCharges.reduce((sum, charge) => sum + charge.amount, 0);
-
   const [rentCharge, usage, rate] = values;
   const electricityCharge = Math.round(usage * rate);
   const store = await getStore();
@@ -1491,9 +1488,9 @@ export async function updateUtilityBill({ invoiceId, leaseId, billingPeriod, mon
       utility_charge: electricityCharge,
       water_charge: 0,
       security_deposit: 0,
-      other_charges: additionalTotal,
-      additional_charges: normalizedCharges,
-      total_amount: rentCharge + electricityCharge + additionalTotal,
+      other_charges: WIFI_CHARGE.amount,
+      additional_charges: [WIFI_CHARGE],
+      total_amount: rentCharge + electricityCharge + WIFI_CHARGE.amount,
       due_date: dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       status: 'unpaid',
       created_at: new Date().toISOString(),
@@ -1506,10 +1503,7 @@ export async function updateUtilityBill({ invoiceId, leaseId, billingPeriod, mon
     }
     return invoice;
   }
-  const legacyOtherTotal = !Array.isArray(invoice.additional_charges) ? Number(invoice.other_charges || 0) : 0;
-  const effectiveCharges = normalizedCharges.length || Array.isArray(invoice.additional_charges) ? normalizedCharges : legacyOtherTotal > 0 ? [{ id: 'legacy-other', label: 'Other charges', amount: legacyOtherTotal }] : [];
-  const effectiveAdditionalTotal = effectiveCharges.reduce((sum, charge) => sum + Number(charge.amount || 0), 0);
-  const totalAmount = rentCharge + electricityCharge + effectiveAdditionalTotal;
+  const totalAmount = rentCharge + electricityCharge + WIFI_CHARGE.amount;
   const totalPaid = (store[COLLECTIONS.PAYMENTS] || [])
     .filter((payment) => payment.invoice_id === invoiceId)
     .reduce((sum, payment) => sum + Number(payment.amount_paid || 0), 0);
@@ -1519,8 +1513,8 @@ export async function updateUtilityBill({ invoiceId, leaseId, billingPeriod, mon
     utility_charge: electricityCharge,
     water_charge: 0,
     security_deposit: 0,
-    additional_charges: effectiveCharges,
-    other_charges: effectiveAdditionalTotal,
+    additional_charges: [WIFI_CHARGE],
+    other_charges: WIFI_CHARGE.amount,
     total_amount: totalAmount,
     status: totalAmount > 0 && totalPaid >= totalAmount ? 'paid' : totalPaid > 0 ? 'partial' : 'unpaid',
   };
@@ -1852,6 +1846,7 @@ export async function approveTenant({
       throw new Error('The verified initial payment is greater than the assigned room rent. Correct the rent before approving.');
     }
     let initialPaymentDateStr = '';
+    let initialPaymentDateObj = null;
     if (verifiedInitialPayment > 0) {
       const paymentDate = /^\d{4}-\d{2}-\d{2}$/.test(String(initialPaymentDate || ''))
         ? new Date(`${initialPaymentDate}T00:00:00`)
@@ -1863,6 +1858,7 @@ export async function approveTenant({
       if (!initialPaymentDate || Number.isNaN(paymentDate.getTime()) || paymentDay > today) {
         throw new Error('The submitted initial payment has an invalid or future payment date.');
       }
+      initialPaymentDateObj = paymentDay;
       initialPaymentDateStr = paymentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     }
     
@@ -1874,9 +1870,12 @@ export async function approveTenant({
     const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     const startDate = now.toISOString().split('T')[0];
     
-    // Calculate due date (next month, on due day)
-    const dueDate = requestedDueDate ? new Date(`${requestedDueDate}T00:00:00`) : new Date(now);
-    if (!requestedDueDate) {
+    // Start the next billing cycle 30 days after the advance is paid in full.
+    const advancePaidInFull = verifiedInitialPayment >= rent && initialPaymentDateObj;
+    const dueDate = advancePaidInFull
+      ? addDaysToDate(initialPaymentDateObj, 30)
+      : requestedDueDate ? new Date(`${requestedDueDate}T00:00:00`) : new Date(now);
+    if (!advancePaidInFull && !requestedDueDate) {
       dueDate.setMonth(dueDate.getMonth() + 1);
       dueDate.setDate(dueDayNum);
     }
@@ -1918,10 +1917,11 @@ export async function approveTenant({
       rent_charge: rent,
       utility_charge: 0,
       security_deposit: 0,
-      other_charges: 0,
-      total_amount: rent,
+      other_charges: WIFI_CHARGE.amount,
+      additional_charges: [WIFI_CHARGE],
+      total_amount: rent + WIFI_CHARGE.amount,
       due_date: dueDateStr,
-      status: verifiedInitialPayment >= rent ? 'paid' : verifiedInitialPayment > 0 ? 'partial' : 'unpaid',
+      status: verifiedInitialPayment >= rent + WIFI_CHARGE.amount ? 'paid' : verifiedInitialPayment > 0 ? 'partial' : 'unpaid',
       created_at: approvedAtStr,
       notes: 'Initial payment: 1 month advance',
     };
@@ -1942,7 +1942,9 @@ export async function approveTenant({
       tenant_id: tenantId,
       type: 'approval',
       title: 'Welcome! Your application was approved',
-      message: `Your account has been approved. You've been assigned to Room ${room.room_number}. Your initial payment of ₱${rent.toLocaleString()} (1 month advance) is due on ${dueDateStr}.`,
+      message: advancePaidInFull
+        ? `Your account has been approved and you've been assigned to Room ${room.room_number}. Your 1 month advance has been received. Your next billing is due on ${dueDateStr}.`
+        : `Your account has been approved. You've been assigned to Room ${room.room_number}. Your initial payment of ₱${rent.toLocaleString()} (1 month advance) is due on ${dueDateStr}.`,
       read: false,
       created_at: approvedAtStr,
       related_invoice_id: invoiceId,
@@ -2436,6 +2438,12 @@ export async function recordPayment({ invoiceId, amountPaid, paymentDate, paymen
       related_invoice_id: invoiceId,
     } : null;
 
+    const nextBillingDate = lease && invoice.invoice_type === 'initial' && newBalance === 0
+      ? addDaysToDate(payDate, 30)
+      : null;
+    const nextBillingDueDay = nextBillingDate?.getDate();
+    const nextBillingDueDateStr = nextBillingDate?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
     if (isFirebaseConfigured && db) {
       const { writeBatch, doc } = await getFirestoreFns();
       const batch = writeBatch(db);
@@ -2444,7 +2452,9 @@ export async function recordPayment({ invoiceId, amountPaid, paymentDate, paymen
         status: newStatus,
         total_amount: invoiceTotal,
         security_deposit: 0,
+        ...(nextBillingDueDateStr ? { due_date: nextBillingDueDateStr } : {}),
       });
+      if (nextBillingDueDay) batch.update(doc(db, COLLECTIONS.LEASES, lease.id), { due_day_of_month: nextBillingDueDay });
       if (notification) batch.set(doc(db, COLLECTIONS.TENANT_NOTIFICATIONS, notification.id), notification);
       await batch.commit();
     } else {
@@ -2455,7 +2465,10 @@ export async function recordPayment({ invoiceId, amountPaid, paymentDate, paymen
         mockInvoice.status = newStatus;
         mockInvoice.total_amount = invoiceTotal;
         mockInvoice.security_deposit = 0;
+        if (nextBillingDueDateStr) mockInvoice.due_date = nextBillingDueDateStr;
       }
+      const mockLease = nextBillingDueDay ? (mockStore[COLLECTIONS.LEASES] || []).find((item) => item.id === lease.id) : null;
+      if (mockLease) mockLease.due_day_of_month = nextBillingDueDay;
       if (notification) {
         if (!mockStore[COLLECTIONS.TENANT_NOTIFICATIONS]) mockStore[COLLECTIONS.TENANT_NOTIFICATIONS] = [];
         mockStore[COLLECTIONS.TENANT_NOTIFICATIONS].unshift(notification);
@@ -2484,11 +2497,28 @@ export async function getTenantNotifications(tenantId) {
     const notifications = store[COLLECTIONS.TENANT_NOTIFICATIONS] || [];
     
     return notifications
-      .filter((notif) => notif.tenant_id === tenantId)
+      .filter((notif) => notif.tenant_id === tenantId && !notif.dismissed)
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   } catch (error) {
     console.error('Error fetching tenant notifications:', error);
     return [];
+  }
+}
+
+/** Dismiss a tenant's notification without deleting its record. */
+export async function dismissTenantNotification(notificationId) {
+  try {
+    if (isFirebaseConfigured && db) {
+      await updateDocument(COLLECTIONS.TENANT_NOTIFICATIONS, notificationId, { dismissed: true });
+    } else {
+      const mockStore = getNormalizedMockDatabase();
+      const notification = (mockStore[COLLECTIONS.TENANT_NOTIFICATIONS] || []).find((item) => item.id === notificationId);
+      if (notification) notification.dismissed = true;
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('Error dismissing tenant notification:', error);
+    throw error;
   }
 }
 

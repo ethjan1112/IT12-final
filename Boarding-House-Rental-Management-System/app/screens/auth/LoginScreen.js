@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import {
   Keyboard,
+  Animated,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -23,7 +23,6 @@ import AuthNotice from '../../components/auth/AuthNotice';
 import AuthPrimaryButton from '../../components/auth/AuthPrimaryButton';
 import AuthModeSelector from '../../components/auth/AuthModeSelector';
 
-const REMEMBERED_ACCOUNT_KEY = '@nads-gracy/remembered-login';
 
 /* ─── Brand palette for the hero section & form ──────────────────────── */
 
@@ -120,22 +119,6 @@ function PasswordVisibilityButton({ visible, onPress, palette }) {
   );
 }
 
-function RememberAccount({ value, onChange, palette }) {
-  return (
-    <Pressable
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: value }}
-      onPress={() => onChange(!value)}
-      style={styles.rememberRow}
-    >
-      <View style={[styles.checkbox, { borderColor: value ? palette.accent : palette.border, backgroundColor: value ? palette.accent : 'transparent' }]}>
-        {value ? <Ionicons name="checkmark" size={13} color="#FFFFFF" /> : null}
-      </View>
-      <Text style={[styles.rememberText, { color: palette.textSecondary }]}>Remember my account</Text>
-    </Pressable>
-  );
-}
-
 function RecoveryModal({
   visible,
   onClose,
@@ -203,11 +186,18 @@ function RecoveryModal({
   );
 }
 
-function PrivacyConsentModal({ visible, onClose, onAgree, onDecline, checked, onToggle, palette }) {
+function PrivacyConsentModal({ visible, onClose, onAgree, onDecline, checked, onToggle, validationMessage, validationOpacity, palette }) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.modalBackdrop}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close privacy consent" />
+        {validationMessage ? (
+          <Animated.View pointerEvents="none" style={{ position: 'absolute', top: 48, left: 24, right: 24, alignItems: 'center', zIndex: 2, opacity: validationOpacity }}>
+            <View style={{ backgroundColor: palette.dangerBg, borderColor: palette.danger, borderWidth: 1, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10, elevation: 6 }}>
+              <Text style={{ color: palette.danger, fontSize: 14, fontWeight: '600', textAlign: 'center' }}>{validationMessage}</Text>
+            </View>
+          </Animated.View>
+        ) : null}
         <View style={[styles.modalCard, { backgroundColor: palette.surface, borderColor: palette.border, maxHeight: '88%' }]}>
           <View style={styles.modalTopRow}>
             <View style={[styles.modalIcon, { backgroundColor: palette.accentSoft }]}>
@@ -316,9 +306,10 @@ export default function LoginScreen({ onLoginSuccess }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberAccount, setRememberAccount] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
+  const [signupToastOpacity] = useState(() => new Animated.Value(0));
+  const signupToastTimer = useRef(null);
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -326,6 +317,9 @@ export default function LoginScreen({ onLoginSuccess }) {
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [privacyVisible, setPrivacyVisible] = useState(false);
   const [privacyChecked, setPrivacyChecked] = useState(false);
+  const [privacyValidationMessage, setPrivacyValidationMessage] = useState(null);
+  const [privacyValidationOpacity] = useState(() => new Animated.Value(0));
+  const privacyValidationTimer = useRef(null);
 
   const [recoveryVisible, setRecoveryVisible] = useState(false);
   const [recoveryEmail, setRecoveryEmail] = useState('');
@@ -336,49 +330,15 @@ export default function LoginScreen({ onLoginSuccess }) {
   const passwordRef = useRef(null);
   const confirmPasswordRef = useRef(null);
 
-  /* ── Remembered account ───────────────────────────── */
-  useEffect(() => {
-    let active = true;
-    AsyncStorage.getItem(REMEMBERED_ACCOUNT_KEY)
-      .then((stored) => {
-        if (!active || !stored) return;
-        const account = JSON.parse(stored);
-        if (account.type === 'admin') {
-          setRememberAccount(false);
-          AsyncStorage.removeItem(REMEMBERED_ACCOUNT_KEY).catch(() => {});
-          return;
-        }
-        if (typeof account.email === 'string') setEmail(account.email);
-        setRememberAccount(true);
-      })
-      .catch(() => {});
-
-    return () => { active = false; };
-  }, []);
-
-  const rememberCurrentAccount = async (nextEmail, shouldRemember = rememberAccount) => {
-    try {
-      const cleanEmail = String(nextEmail || '').trim();
-      if (shouldRemember && cleanEmail) {
-        await AsyncStorage.setItem(REMEMBERED_ACCOUNT_KEY, JSON.stringify({ email: cleanEmail }));
-      } else {
-        await AsyncStorage.removeItem(REMEMBERED_ACCOUNT_KEY);
-      }
-    } catch (error) {
-      // A storage error should not prevent a valid sign-in.
-      console.warn('Could not save the remembered account preference:', error?.message);
-    }
+  const closePrivacyConsent = () => {
+    clearTimeout(privacyValidationTimer.current);
+    privacyValidationOpacity.stopAnimation();
+    privacyValidationOpacity.setValue(0);
+    setPrivacyValidationMessage(null);
+    setPrivacyVisible(false);
   };
 
-  const changeRememberAccount = (value) => {
-    setRememberAccount(value);
-    rememberCurrentAccount(email, value);
-  };
-
-  const changeLoginEmail = (value) => {
-    setEmail(value);
-    if (rememberAccount) rememberCurrentAccount(value, true);
-  };
+  useEffect(() => () => clearTimeout(privacyValidationTimer.current), []);
 
   /* ── Auth handlers ────────────────────────────────── */
   const handleSignIn = async () => {
@@ -393,7 +353,6 @@ export default function LoginScreen({ onLoginSuccess }) {
     setLoading(true);
     try {
       const user = await loginWithEmail(cleanEmail, password);
-      await rememberCurrentAccount(cleanEmail);
       setLoading(false);
       onLoginSuccess?.(user);
     } catch (error) {
@@ -440,7 +399,6 @@ export default function LoginScreen({ onLoginSuccess }) {
         password,
         phone: cleanPhone,
       });
-      await rememberCurrentAccount(email.trim());
       setLoading(false);
       onLoginSuccess?.(user);
     } catch (error) {
@@ -474,6 +432,21 @@ export default function LoginScreen({ onLoginSuccess }) {
   };
 
   const isRegistering = formMode === 'register';
+  useEffect(() => {
+    clearTimeout(signupToastTimer.current);
+    signupToastOpacity.stopAnimation();
+    signupToastOpacity.setValue(0);
+    if (!isRegistering || message?.type !== 'error') return undefined;
+
+    Animated.timing(signupToastOpacity, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+    signupToastTimer.current = setTimeout(() => {
+      Animated.timing(signupToastOpacity, { toValue: 0, duration: 400, useNativeDriver: true }).start();
+    }, 2800);
+
+    return () => clearTimeout(signupToastTimer.current);
+  }, [isRegistering, message, signupToastOpacity]);
+  useEffect(() => () => clearTimeout(signupToastTimer.current), []);
+
   const heroHeight = isRegistering
     ? Math.min(190, Math.max(150, screenHeight * 0.25))
     : Math.min(220, Math.max(175, screenHeight * 0.30));
@@ -555,7 +528,7 @@ export default function LoginScreen({ onLoginSuccess }) {
                 : 'View your room, payments, and requests.'}
             </Text>
 
-            <Message message={message} palette={palette} />
+            {!(isRegistering && message?.type === 'error') && <Message message={message} palette={palette} />}
 
             {isRegistering ? (
               <>
@@ -658,7 +631,7 @@ export default function LoginScreen({ onLoginSuccess }) {
                   autoComplete="email"
                   textContentType="emailAddress"
                   value={email}
-                  onChangeText={changeLoginEmail}
+                  onChangeText={setEmail}
                   returnKeyType="next"
                   onSubmitEditing={() => passwordRef.current?.focus()}
                 />
@@ -682,7 +655,6 @@ export default function LoginScreen({ onLoginSuccess }) {
                 />
 
                 <View style={styles.utilityRow}>
-                  <RememberAccount value={rememberAccount} onChange={changeRememberAccount} palette={palette} />
                   <Pressable onPress={openRecovery} hitSlop={6} style={styles.forgotButton}>
                     <Text style={[styles.forgotText, { color: palette.accent }]}>Forgot password?</Text>
                   </Pressable>
@@ -703,6 +675,15 @@ export default function LoginScreen({ onLoginSuccess }) {
         </ScrollView>
       </KeyboardAvoidingView>
 
+      {isRegistering && message?.type === 'error' ? (
+        <Animated.View pointerEvents="none" style={{ position: 'absolute', top: safeAreaTop + 16, left: 24, right: 24, alignItems: 'center', zIndex: 10, opacity: signupToastOpacity }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: palette.dangerBg, borderColor: palette.danger, borderWidth: 1, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10, elevation: 6 }}>
+            <Ionicons name="alert-circle-outline" size={19} color={palette.danger} />
+            <Text style={{ color: palette.text, fontSize: 13, lineHeight: 19, flexShrink: 1 }}>{message.text}</Text>
+          </View>
+        </Animated.View>
+      ) : null}
+
       <RecoveryModal
         visible={recoveryVisible}
         onClose={() => setRecoveryVisible(false)}
@@ -716,14 +697,26 @@ export default function LoginScreen({ onLoginSuccess }) {
       />
       <PrivacyConsentModal
         visible={privacyVisible}
-        onClose={() => setPrivacyVisible(false)}
+        onClose={closePrivacyConsent}
         onToggle={() => setPrivacyChecked((value) => !value)}
         checked={privacyChecked}
+        validationMessage={privacyValidationMessage}
+        validationOpacity={privacyValidationOpacity}
         onAgree={() => {
           if (!privacyChecked) {
-            setMessage({ type: 'error', text: 'Check the consent box to confirm you have read and agree.' });
+            clearTimeout(privacyValidationTimer.current);
+            setPrivacyValidationMessage('Check the consent box to confirm you have read and agree.');
+            privacyValidationOpacity.setValue(0);
+            Animated.timing(privacyValidationOpacity, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+            privacyValidationTimer.current = setTimeout(() => {
+              Animated.timing(privacyValidationOpacity, { toValue: 0, duration: 400, useNativeDriver: true }).start(({ finished }) => {
+                if (finished) setPrivacyValidationMessage(null);
+              });
+            }, 2800);
             return;
           }
+          clearTimeout(privacyValidationTimer.current);
+          setPrivacyValidationMessage(null);
           setPrivacyAccepted(true);
           setPrivacyVisible(false);
           setMessage({ type: 'success', text: 'Thank you. Your Data Privacy Consent has been recorded for this signup.' });
@@ -842,15 +835,9 @@ const styles = StyleSheet.create({
     minHeight: 32,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     gap: 8,
     marginBottom: 18,
-  },
-  rememberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 36,
-    gap: 8,
   },
   checkbox: {
     width: 19,
@@ -859,10 +846,6 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  rememberText: {
-    fontSize: 12,
-    fontWeight: '600',
   },
   forgotButton: {
     paddingVertical: 8,

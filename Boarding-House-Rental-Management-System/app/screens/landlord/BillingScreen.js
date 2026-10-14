@@ -36,7 +36,6 @@ export default function BillingScreen() {
   const [error, setError] = useState(null);
   const [editingBill, setEditingBill] = useState(null);
   const [editValues, setEditValues] = useState({ monthlyRent: '', consumedKwh: '', ratePerKwh: '' });
-  const [additionalCharges, setAdditionalCharges] = useState([]);
   const [editError, setEditError] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -92,7 +91,6 @@ export default function BillingScreen() {
       consumedKwh: bill.hasValidReading ? String(bill.usage) : '',
       ratePerKwh: String(bill.ratePerKwh ?? 12),
     });
-    setAdditionalCharges((bill.additionalCharges || []).map((charge, index) => ({ id: charge.id || `charge-${index}`, label: charge.label || charge.name || '', amount: String(charge.amount ?? '') })));
     setEditError('');
   };
 
@@ -105,7 +103,6 @@ export default function BillingScreen() {
         invoiceId: editingBill.invoiceId,
         leaseId: editingBill.leaseId,
         billingPeriod: editingBill.billingPeriod,
-        additionalCharges,
         monthlyRent: editValues.monthlyRent,
         consumedKwh: editValues.consumedKwh,
         ratePerKwh: editValues.ratePerKwh,
@@ -462,64 +459,12 @@ export default function BillingScreen() {
                     ))}
                   </View>
 
-                  {/* kWh Stats Row */}
-                  <View style={{ 
-                    flexDirection: 'row', 
-                    gap: spacing.sm, 
-                    paddingTop: spacing.md, 
-                    borderTopWidth: 1, 
-                    borderTopColor: colors.cardBorder 
-                  }}>
-                    <View style={{ 
-                      flex: 1, 
-                      backgroundColor: colors.bg, 
-                      borderRadius: 10, 
-                      paddingVertical: 10, 
-                      paddingHorizontal: 8, 
-                      alignItems: 'center',
-                      borderWidth: 1,
-                      borderColor: colors.cardBorder
-                    }}>
-                      <Text style={{ fontSize: fs(10), fontWeight: '600', color: colors.textMuted, marginBottom: 4, textTransform: 'uppercase' }}>Prev kWh</Text>
-                      <Text style={{ fontSize: fs(14), fontWeight: '700', color: colors.textSecondary }}>{item.prevKwh}</Text>
-                    </View>
-                    <View style={{ 
-                      flex: 1, 
-                      backgroundColor: colors.bg, 
-                      borderRadius: 10, 
-                      paddingVertical: 10, 
-                      paddingHorizontal: 8, 
-                      alignItems: 'center',
-                      borderWidth: 1,
-                      borderColor: colors.cardBorder
-                    }}>
-                      <Text style={{ fontSize: fs(10), fontWeight: '600', color: colors.textMuted, marginBottom: 4, textTransform: 'uppercase' }}>Curr kWh</Text>
-                      <Text style={{ fontSize: fs(14), fontWeight: '700', color: colors.textSecondary }}>{item.currKwh}</Text>
-                    </View>
-                    <View style={{ 
-                      flex: 1.2, 
-                      backgroundColor: colors.iconBgYellow, 
-                      borderRadius: 10, 
-                      paddingVertical: 10, 
-                      paddingHorizontal: 8, 
-                      alignItems: 'center',
-                      borderWidth: 1,
-                      borderColor: colors.warning
-                    }}>
-                      <Text style={{ fontSize: fs(10), fontWeight: '700', color: colors.warning, marginBottom: 4, textTransform: 'uppercase' }}>Usage</Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Ionicons name="flash" size={16} color={colors.warning} style={{ marginRight: 3 }} />
-                        <Text style={{ fontSize: fs(14), fontWeight: '800', color: colors.text }}>{item.usage} kWh</Text>
-                      </View>
-                    </View>
-                  </View>
-
                   <TouchableOpacity
                     onPress={() => openBillEditor(item)}
-                    style={{ alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.md, paddingHorizontal: 13, paddingVertical: 9, borderRadius: 9, backgroundColor: colors.accentBg }}
+                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: spacing.sm, paddingHorizontal: 16, paddingVertical: 18, minHeight: 60, borderRadius: 12, backgroundColor: colors.accentBg, borderWidth: 1, borderColor: colors.accent }}
                   >
-                    <Ionicons name="create-outline" size={16} color={colors.accent} />
-                    <Text style={{ fontSize: fs(12), fontWeight: '800', color: colors.accent }}>{item.invoiceId ? 'Edit bill' : 'Create bill'}</Text>
+                    <Ionicons name="create-outline" size={21} color={colors.accent} />
+                    <Text style={{ fontSize: fs(15), fontWeight: '800', color: colors.accent }}>{item.invoiceId ? 'Edit bill' : 'Create bill'}</Text>
                   </TouchableOpacity>
                 </View>
               ))
@@ -587,49 +532,6 @@ export default function BillingScreen() {
                   {consumedKwh.toLocaleString()} kWh × ₱{ratePerKwh.toLocaleString()}/kWh = <Text style={{ fontWeight: '800', color: colors.text }}>₱{calculatedElectricityAmount.toLocaleString()}</Text>
                 </Text>
               </View>
-            </View>
-
-            <View style={{ marginBottom: 14 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                <Text style={{ fontSize: fs(13), fontWeight: '800', color: colors.text }}>Additional charges</Text>
-                <TouchableOpacity
-                  onPress={() => setAdditionalCharges((current) => [...current, { id: `charge-${Date.now()}-${current.length}`, label: '', amount: '' }])}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8, backgroundColor: colors.accentBg }}
-                >
-                  <Ionicons name="add" size={16} color={colors.accent} />
-                  <Text style={{ color: colors.accent, fontSize: fs(12), fontWeight: '800' }}>Add charge</Text>
-                </TouchableOpacity>
-              </View>
-              {additionalCharges.map((charge) => (
-                <View key={charge.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <TextInput
-                    value={charge.label}
-                    onChangeText={(value) => setAdditionalCharges((current) => current.map((item) => item.id === charge.id ? { ...item, label: value } : item))}
-                    placeholder="Wi-Fi (₱100 per person)"
-                    placeholderTextColor={colors.textMuted}
-                    editable={!savingEdit}
-                    style={{ flex: 1, minWidth: 0, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 10, color: colors.text, fontSize: fs(13) }}
-                  />
-                  <TextInput
-                    value={charge.amount}
-                    onChangeText={(value) => setAdditionalCharges((current) => current.map((item) => item.id === charge.id ? { ...item, amount: value } : item))}
-                    keyboardType="decimal-pad"
-                    placeholder="Amount"
-                    placeholderTextColor={colors.textMuted}
-                    editable={!savingEdit}
-                    style={{ width: 94, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 10, color: colors.text, fontSize: fs(13) }}
-                  />
-                  <TouchableOpacity
-                    onPress={() => setAdditionalCharges((current) => current.filter((item) => item.id !== charge.id))}
-                    disabled={savingEdit}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Remove ${charge.label || 'additional charge'}`}
-                    style={{ width: 36, height: 40, alignItems: 'center', justifyContent: 'center' }}
-                  >
-                    <Ionicons name="trash-outline" size={18} color={colors.dangerText} />
-                  </TouchableOpacity>
-                </View>
-              ))}
             </View>
 
             {!!editError && <Text style={{ color: colors.dangerText, fontSize: fs(13), marginBottom: 12 }}>{editError}</Text>}

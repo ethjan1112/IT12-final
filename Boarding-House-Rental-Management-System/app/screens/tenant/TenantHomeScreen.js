@@ -190,14 +190,11 @@ export default function TenantHomeScreen({ user, onNavigateToNotifications }) {
                   backgroundColor: colors.heroBarBg,
                 }} />
 
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', marginBottom: 12, gap: 8 }}>
+                  <Ionicons name="cash-outline" size={18} color={colors.heroText} />
                   <Text style={{ fontSize: fs(12), fontWeight: '800', color: colors.heroSubtext, letterSpacing: 1, textTransform: 'uppercase' }}>
                     Outstanding balance
                   </Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.16)' }}>
-                    <Ionicons name={tenant.outstandingBalance > 0 ? 'time-outline' : 'checkmark-circle-outline'} size={14} color={colors.heroText} />
-                    <Text style={{ fontSize: fs(11), fontWeight: '800', color: colors.heroText }}>{tenant.outstandingBalance > 0 ? 'PAYMENT DUE' : 'ALL CAUGHT UP'}</Text>
-                  </View>
                 </View>
 
                 <Text style={{

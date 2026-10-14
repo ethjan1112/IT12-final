@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const keyFor = (uid) => `announcements_last_seen_${uid || 'tenant'}`;
+const dismissedKeyFor = (uid) => `announcements_dismissed_${uid || 'tenant'}`;
 
 export const getAnnouncementTime = (announcement) => {
   const idTime = Number(String(announcement.announcement_id || announcement.id || '').match(/\d{10,}/)?.[0]);
@@ -25,5 +26,26 @@ export async function markAnnouncementsSeen(uid, announcements = []) {
     await AsyncStorage.setItem(keyFor(uid), String(latest));
   } catch {
     // Ignore storage errors; the badge just shows again next time.
+  }
+}
+
+export async function getDismissedAnnouncementIds(uid) {
+  try {
+    const value = await AsyncStorage.getItem(dismissedKeyFor(uid));
+    const ids = value ? JSON.parse(value) : [];
+    return Array.isArray(ids) ? ids : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function dismissAnnouncement(uid, announcementId) {
+  try {
+    const ids = await getDismissedAnnouncementIds(uid);
+    if (!ids.includes(announcementId)) {
+      await AsyncStorage.setItem(dismissedKeyFor(uid), JSON.stringify([...ids, announcementId]));
+    }
+  } catch {
+    // Keep the dismissal in the current screen even if local storage is unavailable.
   }
 }
