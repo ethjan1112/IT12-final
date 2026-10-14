@@ -294,7 +294,7 @@ export default function TenantNotificationsScreen({ user }) {
                           hitSlop={8}
                           style={{ position: 'absolute', top: 8, right: 8, zIndex: 2, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg }}
                         >
-                          <Ionicons name="close" size={15} color={colors.textMuted} />
+                          <Ionicons name="close" size={15} color={colors.dangerText} />
                         </TouchableOpacity>
                         {/* Top row: icon, category tag, time */}
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>

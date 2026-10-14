@@ -1313,9 +1313,11 @@ export async function getRentBilling(billingPeriod = getCurrentBillingPeriod()) 
 
         return {
           id: String(tenant.id).replace('tenant-', ''),
+          tenantId: tenant.id,
           name: `${tenant.first_name} ${tenant.last_name}`,
           initials: tenant.initials,
           room: room ? `R${parseInt(room.room_number, 10)}` : 'R?',
+          roomNumber: room?.room_number || '?',
           dueDate: invoice ? String(invoice.due_date || '') : 'Not billed',
           amount: invoice?.rent_charge ?? lease.agreed_monthly_rent ?? roomType?.base_rent ?? 0,
           totalAmount: invoice ? getInvoiceTotalAmount(invoice) : lease.agreed_monthly_rent ?? roomType?.base_rent ?? 0,

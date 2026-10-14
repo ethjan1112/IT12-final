@@ -220,7 +220,7 @@ export default function PendingApprovalsScreen() {
                     onPress={() => handleRejectPress(tenant)}
                     style={{
                       flex: 1,
-                      backgroundColor: colors.dangerBg,
+                      backgroundColor: colors.dangerText,
                       paddingVertical: 14,
                       borderRadius: 12,
                       alignItems: 'center',
@@ -229,15 +229,15 @@ export default function PendingApprovalsScreen() {
                       gap: 8,
                     }}
                   >
-                    <Ionicons name="close-circle-outline" size={20} color={colors.dangerText} />
-                    <Text style={{ fontSize: fs(15), fontWeight: '700', color: colors.dangerText }}>Reject</Text>
+                    <Ionicons name="close-circle-outline" size={20} color="#fff" />
+                    <Text style={{ fontSize: fs(15), fontWeight: '700', color: '#fff' }}>Reject</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
                     onPress={() => handleApprovePress(tenant)}
                     style={{
                       flex: 1,
-                      backgroundColor: colors.accent,
+                      backgroundColor: colors.successText,
                       paddingVertical: 14,
                       borderRadius: 12,
                       alignItems: 'center',

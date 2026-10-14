@@ -380,7 +380,7 @@ export default function LoginScreen({ onLoginSuccess }) {
       setMessage({ type: 'error', text: 'Mobile number must be 11 digits (e.g. 09123456789).' });
       return;
     }
-    if (password.toLowerCase() !== confirmPassword.toLowerCase()) {
+    if (password !== confirmPassword) {
       setMessage({ type: 'error', text: 'Your passwords do not match.' });
       return;
     }

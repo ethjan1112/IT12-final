@@ -203,7 +203,7 @@ export default function TenantFinancesScreen({ user }) {
             onPress={() => !hasPendingProof && setShowPaymentModal(true)}
             disabled={hasPendingProof || !currentInvoice?.id}
             style={{
-              backgroundColor: hasPendingProof ? colors.warningText : colors.accent,
+              backgroundColor: hasPendingProof ? colors.warningText : colors.successText,
               padding: 16,
               borderRadius: 12,
               flexDirection: 'row',

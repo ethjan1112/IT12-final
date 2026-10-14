@@ -8,14 +8,11 @@ const supabasePublishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabasePublishableKey);
 
 async function getFirebaseAccessToken() {
-  const user = firebaseAuth?.currentUser;
-  if (!user) return null;
-
-  const tokenResult = await user.getIdTokenResult();
-  if (tokenResult.claims.role !== 'authenticated') {
-    throw new Error('Supabase access is not provisioned for this account. Ask the administrator to run `node scripts/configure-firebase-supabase-claims.mjs <service-account.json>`, then sign out and back in.');
-  }
-  return tokenResult.token;
+  // Supabase assigns Firebase JWTs without a `role` custom claim to the anon
+  // Postgres role. The Firebase-specific RLS policies permit only verified
+  // tokens from our configured Firebase project, so tenant signup needs no
+  // privileged Firebase Admin claim write or paid Cloud Function.
+  return (await firebaseAuth?.currentUser?.getIdToken()) || null;
 }
 
 // Firebase handles sign-in and token refresh. Supabase just receives the

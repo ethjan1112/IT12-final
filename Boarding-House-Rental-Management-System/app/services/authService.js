@@ -44,6 +44,18 @@ function getFriendlyAuthError(error, action) {
   }
 }
 
+// Try the exact password first. The normalized variants are kept as a fallback
+// for accounts created by older signup code that lowercased passwords.
+function getPasswordCandidates(password) {
+  const exactPassword = String(password ?? '');
+  const legacyPassword = exactPassword.trim();
+  return [...new Set([
+    exactPassword,
+    legacyPassword.toLowerCase(),
+    legacyPassword.toUpperCase(),
+  ])];
+}
+
 async function getUserSessionFromFirebaseUser(fbUser) {
   if (!fbUser || !db) return null;
 
@@ -127,12 +139,7 @@ async function getUserSessionFromFirebaseUser(fbUser) {
  */
 export async function loginWithEmail(email, password) {
   const cleanEmail = email.trim().toLowerCase();
-  const enteredPass = password.trim();
-  const passwordCandidates = [...new Set([
-    enteredPass.toLowerCase(),
-    enteredPass.toUpperCase(),
-    enteredPass,
-  ])];
+  const passwordCandidates = getPasswordCandidates(password);
 
   if (!isFirebaseConfigured || !auth || !db) {
     throw new Error('Online sign-in is unavailable right now. Please try again later.');
@@ -356,13 +363,14 @@ export async function updateTenantAccount({
  */
 export async function registerUser({ email, password, name, phone = '', roomNumber = '' }) {
   const cleanEmail = email.trim().toLowerCase();
-  const cleanPass = password.trim().toLowerCase();
+  // Passwords are case-sensitive credentials: preserve the user's input.
+  const cleanPass = String(password ?? '');
   const cleanName = name.trim();
   // Public self-registration is restricted to tenants. Staff roles are provisioned
   // by trusted administration in Firebase Authentication and Firestore.
   const role = 'tenant';
 
-  if (!cleanEmail || !cleanPass || !cleanName) {
+  if (!cleanEmail || !cleanPass.trim() || !cleanName) {
     throw new Error('Please fill in all required fields');
   }
 
@@ -388,7 +396,20 @@ export async function registerUser({ email, password, name, phone = '', roomNumb
         // Auth can succeed before a Firestore rule/network error. Allow retry only for
         // an existing tenant Auth account whose tenant profile is still missing.
         if (createError.code !== 'auth/email-already-in-use') throw createError;
-        const existingCred = await signInWithEmailAndPassword(auth, cleanEmail, cleanPass);
+        let existingCred = null;
+        let lastSignInError = null;
+        for (const candidate of getPasswordCandidates(cleanPass)) {
+          try {
+            existingCred = await signInWithEmailAndPassword(auth, cleanEmail, candidate);
+            break;
+          } catch (signInError) {
+            if (!['auth/invalid-credential', 'auth/wrong-password', 'auth/user-not-found'].includes(signInError?.code)) {
+              throw signInError;
+            }
+            lastSignInError = signInError;
+          }
+        }
+        if (!existingCred) throw lastSignInError;
         fbUser = existingCred.user;
         const existingProfile = await getDoc(doc(db, COLLECTIONS.USERS, fbUser.uid));
         if (existingProfile.exists()) {

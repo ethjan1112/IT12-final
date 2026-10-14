@@ -163,7 +163,7 @@ export default function TenantRoomChangeScreen({ user }) {
                 activeOpacity={0.8}
                 onPress={submitting ? undefined : submitRequest}
                 accessibilityState={{ disabled: submitting }}
-                style={{ pointerEvents: submitting ? 'none' : 'auto', backgroundColor: colors.primary, paddingVertical: 14, borderRadius: 999, overflow: 'hidden', alignItems: 'center', marginTop: 18, minHeight: 48, justifyContent: 'center', opacity: submitting ? 0.6 : 1 }}
+                style={{ pointerEvents: submitting ? 'none' : 'auto', backgroundColor: colors.successText, paddingVertical: 14, borderRadius: 999, overflow: 'hidden', alignItems: 'center', marginTop: 18, minHeight: 48, justifyContent: 'center', opacity: submitting ? 0.6 : 1 }}
               >
                 {submitting ? (
                   <ActivityIndicator size="small" color={colors.onPrimary} />

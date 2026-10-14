@@ -63,6 +63,7 @@ export default function TenantFinancialManagement({ initialFilter = 'all' }) {
   };
 
   const handleRecordPayment = (tenant) => {
+    if (!tenant) return;
     setSelectedTenant(tenant);
     setPaymentModalVisible(true);
   };
@@ -194,7 +195,7 @@ export default function TenantFinancialManagement({ initialFilter = 'all' }) {
               colors={colors}
             />
             <View style={{ gap: spacing.md }}>
-            {visibleTenants.map((tenant) => {
+            {visibleTenants.filter((tenant) => tenant && typeof tenant === 'object').map((tenant) => {
               const statusColors = getStatusColor(tenant.status);
               return (
                 <View
@@ -214,7 +215,7 @@ export default function TenantFinancialManagement({ initialFilter = 'all' }) {
                         width: 52,
                         height: 52,
                         borderRadius: 26,
-                        backgroundColor: tenant.color,
+                        backgroundColor: tenant.color || colors.accent,
                         alignItems: 'center',
                         justifyContent: 'center',
                       }}
@@ -309,7 +310,10 @@ export default function TenantFinancialManagement({ initialFilter = 'all' }) {
         <RecordPaymentModal
           visible={paymentModalVisible}
           tenant={selectedTenant}
-          onClose={() => setPaymentModalVisible(false)}
+          onClose={() => {
+            setPaymentModalVisible(false);
+            setSelectedTenant(null);
+          }}
           onSuccess={handlePaymentSuccess}
         />
       )}

@@ -251,7 +251,7 @@ export default function TenantComplaintsScreen({ user }) {
                 Submit New Complaint
               </Text>
               <TouchableOpacity onPress={() => setModalVisible(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="close-circle" size={26} color={colors.textMuted} />
+                <Ionicons name="close-circle" size={26} color={colors.dangerText} />
               </TouchableOpacity>
             </View>
 
@@ -315,18 +315,16 @@ export default function TenantComplaintsScreen({ user }) {
                 onPress={() => setModalVisible(false)}
                 style={{
                   flex: 1,
-                  backgroundColor: colors.bg,
+                  backgroundColor: colors.dangerText,
                   paddingVertical: 14,
                   borderRadius: 12,
                   overflow: 'hidden',
                   alignItems: 'center',
-                  borderWidth: 1,
-                  borderColor: colors.cardBorder,
                   minHeight: 48,
                   justifyContent: 'center',
                 }}
               >
-                <Text style={{ fontSize: fs(15), fontWeight: '700', color: colors.textMuted }}>Cancel</Text>
+                <Text style={{ fontSize: fs(15), fontWeight: '700', color: '#fff' }}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={submitting ? undefined : handleCreateComplaint}
@@ -334,7 +332,7 @@ export default function TenantComplaintsScreen({ user }) {
                 style={{
                   pointerEvents: submitting ? 'none' : 'auto',
                   flex: 1,
-                  backgroundColor: colors.primary,
+                  backgroundColor: colors.successText,
                   paddingVertical: 14,
                   borderRadius: 12,
                   overflow: 'hidden',

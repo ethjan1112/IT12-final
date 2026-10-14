@@ -357,7 +357,7 @@ export default function IssuesScreen() {
                       onPress={() => handleUpdateStatus(issue.complaint_id, 'resolved')}
                       style={{
                         flex: 1,
-                        backgroundColor: colors.accent,
+                        backgroundColor: colors.successText,
                         paddingVertical: 14,
                         borderRadius: 12,
                         alignItems: 'center',
@@ -543,9 +543,9 @@ export default function IssuesScreen() {
                     <TouchableOpacity
                       accessibilityRole="button"
                       onPress={() => setSelectedComplaintId(null)}
-                      style={{ flex: 1, minHeight: 46, borderRadius: 11, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder, alignItems: 'center', justifyContent: 'center' }}
+                      style={{ flex: 1, minHeight: 46, borderRadius: 11, backgroundColor: colors.dangerText, alignItems: 'center', justifyContent: 'center' }}
                     >
-                      <Text style={{ fontSize: fs(14), fontWeight: '700', color: colors.textSecondary }}>Close</Text>
+                      <Text style={{ fontSize: fs(14), fontWeight: '700', color: '#fff' }}>Close</Text>
                     </TouchableOpacity>
                     {selectedComplaint.status === 'pending' ? (
                       <TouchableOpacity

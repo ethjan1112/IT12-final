@@ -469,7 +469,7 @@ export default function TenantHomeScreen({ user, onNavigateToNotifications }) {
                 </Text>
               </View>
             <TouchableOpacity onPress={() => setShowReceiptModal(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ width: 36, height: 36, borderRadius: 18, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
-                <Ionicons name="close-circle" size={26} color={colors.textMuted} />
+                <Ionicons name="close-circle" size={26} color={colors.dangerText} />
               </TouchableOpacity>
             </View>
 
@@ -515,7 +515,7 @@ export default function TenantHomeScreen({ user, onNavigateToNotifications }) {
               activeOpacity={0.8}
               onPress={() => setShowReceiptModal(false)}
               style={{
-                backgroundColor: colors.primary,
+                backgroundColor: colors.dangerText,
                 paddingVertical: 14,
                   borderRadius: 12,
                   overflow: 'hidden',
@@ -524,7 +524,7 @@ export default function TenantHomeScreen({ user, onNavigateToNotifications }) {
                 justifyContent: 'center',
               }}
             >
-              <Text style={{ fontSize: fs(15), fontWeight: '800', color: colors.onPrimary }}>
+              <Text style={{ fontSize: fs(15), fontWeight: '800', color: '#fff' }}>
                 Close Receipt
               </Text>
             </TouchableOpacity>
