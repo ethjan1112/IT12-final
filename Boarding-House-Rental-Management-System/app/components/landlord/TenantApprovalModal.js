@@ -134,19 +134,23 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={() => !submitting && onClose()}>
-      <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}
-        onPress={() => !submitting && onClose()}
-      >
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 }}>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close approval dialog"
+          disabled={submitting}
+          style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onPress={onClose}
+        />
+        <View
           style={{
-            width: isMobile ? '90%' : 520,
-            maxHeight: '92%',
+            width: isMobile ? '100%' : 520,
+            height: isMobile ? '94%' : undefined,
+            maxHeight: isMobile ? '96%' : '92%',
             backgroundColor: colors.card,
             borderRadius: 16,
-            padding: 24,
+            padding: isMobile ? 16 : 24,
           }}
-          onPress={(e) => e.stopPropagation()}
         >
           {/* Header */}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -212,7 +216,12 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
             </View>
           )}
 
-          <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingBottom: 8 }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator
+          >
             {/* Room Selection */}
             <Text style={{ fontSize: fs(14), fontWeight: '700', color: colors.text, marginBottom: 8 }}>
               Select Room <Text style={{ color: colors.dangerText }}>*</Text>
@@ -434,8 +443,8 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
               )}
             </TouchableOpacity>
           </View>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
 
       <Modal
         visible={showConfirmation}
@@ -515,4 +524,3 @@ export default function TenantApprovalModal({ visible, tenant, onClose, onSucces
     </Modal>
   );
 }
-
