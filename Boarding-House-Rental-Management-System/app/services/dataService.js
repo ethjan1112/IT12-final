@@ -358,6 +358,10 @@ export async function addRoom({ roomNumber, typeId, reservedForName = '' }) {
     ];
   const roomType = roomTypes.find((type) => type.id === typeId);
   if (!roomType) throw new Error('Choose a valid room type.');
+  const boardingHouse = boardingHouses[0];
+  if (!boardingHouse?.id) {
+    throw new Error('No boarding house is configured. Apply the boarding house setup migration before adding rooms.');
+  }
 
   const formattedNumber = normalizedNumber.padStart(2, '0');
   if (rooms.some((room) => String(parseInt(room.room_number, 10)) === normalizedNumber)) {
@@ -367,7 +371,7 @@ export async function addRoom({ roomNumber, typeId, reservedForName = '' }) {
   const roomId = `room-${Date.now()}`;
   const newRoom = {
     id: roomId,
-    house_id: boardingHouses[0]?.id || 'bh-1',
+    house_id: boardingHouse.id,
     room_number: formattedNumber,
     type_id: roomType.id,
     status: cleanReservedName ? 'occupied' : 'vacant',
@@ -1886,6 +1890,7 @@ export async function approveTenant({
       invoice_type: 'initial',
       rent_charge: rent,
       utility_charge: 0,
+      water_charge: 0,
       security_deposit: 0,
       other_charges: WIFI_CHARGE.amount,
       additional_charges: [WIFI_CHARGE],
