@@ -16,6 +16,7 @@ import {
 } from '../../utils/responsive';
 import { useTheme } from '../../utils/ThemeContext';
 import { getIssues, updateComplaintStatus } from '../../services/dataService';
+import useRealtimeRefresh from '../../hooks/useRealtimeRefresh';
 
 export default function IssuesScreen() {
   const complaintsPerPage = 4;
@@ -33,7 +34,6 @@ export default function IssuesScreen() {
 
   const loadIssues = async () => {
     try {
-      setLoading(true);
       setError(null);
       const data = await getIssues();
       setIssues(data);
@@ -47,6 +47,8 @@ export default function IssuesScreen() {
   useEffect(() => {
     loadIssues();
   }, []);
+
+  useRealtimeRefresh('landlord-complaints', [{ table: 'complaints' }], loadIssues);
 
   const handleUpdateStatus = async (complaintId, newStatus) => {
     try {

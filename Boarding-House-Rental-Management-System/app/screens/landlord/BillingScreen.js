@@ -19,6 +19,7 @@ import {
   getUtilityBills,
   updateUtilityBill,
 } from '../../services/dataService';
+import useRealtimeRefresh from '../../hooks/useRealtimeRefresh';
 
 const getCurrentBillingPeriod = () => {
   const now = new Date();
@@ -148,6 +149,18 @@ export default function BillingScreen() {
       isMounted = false;
     };
   }, []);
+
+  useRealtimeRefresh('landlord-billing', [
+    { table: 'invoices' },
+    { table: 'payments' },
+    { table: 'payment_proofs' },
+    { table: 'utility_readings' },
+    { table: 'leases' },
+    { table: 'tenants' },
+    { table: 'rooms' },
+  ], () => reloadBillingData().catch((err) => {
+    console.warn('Could not refresh live billing data:', err.message || err);
+  }));
 
   const totalCollected = revenueSummary.collected;
   const totalOutstanding = revenueSummary.outstanding;

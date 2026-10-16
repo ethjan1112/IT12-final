@@ -8,6 +8,7 @@ import { getPendingTenantRegistrations } from '../../services/dataService';
 import TenantApprovalModal from '../../components/landlord/TenantApprovalModal';
 import TenantRejectionModal from '../../components/landlord/TenantRejectionModal';
 import TenantListPager from '../../components/landlord/TenantListPager';
+import useRealtimeRefresh from '../../hooks/useRealtimeRefresh';
 
 const TENANTS_PER_PAGE = 5;
 
@@ -25,6 +26,7 @@ export default function PendingApprovalsScreen() {
   const [approvalModalVisible, setApprovalModalVisible] = useState(false);
   const [rejectionModalVisible, setRejectionModalVisible] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState(null);
+  const [realtimeVersion, setRealtimeVersion] = useState(0);
 
   const loadPendingTenants = async () => {
     try {
@@ -42,7 +44,11 @@ export default function PendingApprovalsScreen() {
 
   useEffect(() => {
     loadPendingTenants();
-  }, []);
+  }, [realtimeVersion]);
+
+  useRealtimeRefresh('landlord-pending-approvals-list', [{ table: 'tenants' }], () => {
+    setRealtimeVersion((version) => version + 1);
+  });
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

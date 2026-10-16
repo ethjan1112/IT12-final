@@ -7,6 +7,7 @@ import { isMobile, getResponsivePadding, fs, spacing, cardStyle, safeAreaTop } f
 import { getTenantsWithFinancialStatus } from '../../services/dataService';
 import RecordPaymentModal from '../../components/landlord/RecordPaymentModal';
 import TenantListPager from '../../components/landlord/TenantListPager';
+import useRealtimeRefresh from '../../hooks/useRealtimeRefresh';
 
 const TENANTS_PER_PAGE = 5;
 
@@ -24,6 +25,16 @@ export default function TenantFinancialManagement({ initialFilter = 'all' }) {
   // Modal states
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState(null);
+  const [realtimeVersion, setRealtimeVersion] = useState(0);
+
+  useRealtimeRefresh('landlord-tenant-finances', [
+    { table: 'tenants' },
+    { table: 'leases' },
+    { table: 'rooms' },
+    { table: 'invoices' },
+    { table: 'payments' },
+    { table: 'payment_proofs' },
+  ], () => setRealtimeVersion((version) => version + 1));
 
   const loadTenants = async (filter = 'all') => {
     try {
@@ -42,7 +53,7 @@ export default function TenantFinancialManagement({ initialFilter = 'all' }) {
 
   useEffect(() => {
     loadTenants(activeFilter);
-  }, [activeFilter]);
+  }, [activeFilter, realtimeVersion]);
 
   const pageCount = Math.max(1, Math.ceil(tenants.length / TENANTS_PER_PAGE));
   const visibleTenants = tenants.slice(page * TENANTS_PER_PAGE, (page + 1) * TENANTS_PER_PAGE);

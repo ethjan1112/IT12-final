@@ -7,6 +7,7 @@ import { isMobile, getResponsivePadding, fs, spacing, cardStyle, safeAreaTop } f
 import { getTenantNotifications, markNotificationAsRead, dismissTenantNotification, getAnnouncements } from '../../services/dataService';
 import AnnouncementDetailsModal from '../../components/AnnouncementDetailsModal';
 import { getLastSeen, markAnnouncementsSeen, getAnnouncementTime, getDismissedAnnouncementIds, dismissAnnouncement } from '../../utils/announcementSeen';
+import useRealtimeRefresh from '../../hooks/useRealtimeRefresh';
 
 const timeOf = (item) => {
   const parsed = Date.parse(item.created_at);
@@ -22,11 +23,11 @@ export default function TenantNotificationsScreen({ user }) {
   const [error, setError] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
+  const tenantId = user?.tenant_id || user?.room || '2';
 
   const loadNotifications = async () => {
     try {
       setError(null);
-      const tenantId = user?.tenant_id || user?.room || '2';
       const uid = user?.uid || user?.tenant_id;
       const [data, announcements, lastSeen, dismissedAnnouncementIds] = await Promise.all([
         getTenantNotifications(tenantId),
@@ -62,6 +63,11 @@ export default function TenantNotificationsScreen({ user }) {
   useEffect(() => {
     loadNotifications();
   }, [user]);
+
+  useRealtimeRefresh(`tenant-notifications-${tenantId}`, [
+    { table: 'tenant_notifications', filter: `tenant_id=eq.${tenantId}` },
+    { table: 'announcements' },
+  ], loadNotifications, Boolean(user?.tenant_id));
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

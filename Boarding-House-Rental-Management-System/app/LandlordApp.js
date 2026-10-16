@@ -21,13 +21,19 @@ import TenantDetailFinancial from './screens/landlord/TenantDetailFinancial';
 // Import navigation
 import LandlordBottomNav from './components/LandlordBottomNav';
 import { getPendingTenantRegistrationCount } from './services/dataService';
+import useRealtimeRefresh from './hooks/useRealtimeRefresh';
 
 export default function LandlordApp({ user, onLogout }) {
   const [activeScreen, setActiveScreen] = useState('dashboard');
   const [menuVisible, setMenuVisible] = useState(false);
   const [navigationParams, setNavigationParams] = useState(null);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
+  const [realtimeVersion, setRealtimeVersion] = useState(0);
   const { isDark, toggleTheme, colors } = useTheme();
+
+  useRealtimeRefresh('landlord-pending-approvals-badge', [{ table: 'tenants' }], () => {
+    setRealtimeVersion((version) => version + 1);
+  });
 
   useEffect(() => {
     let isMounted = true;
@@ -44,13 +50,10 @@ export default function LandlordApp({ user, onLogout }) {
     };
 
     refreshSignupCount();
-    const refreshTimer = setInterval(refreshSignupCount, 30000);
-
     return () => {
       isMounted = false;
-      clearInterval(refreshTimer);
     };
-  }, []);
+  }, [realtimeVersion]);
 
   const getScreenTitle = () => {
     switch (activeScreen) {

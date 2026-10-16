@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { isMobile, isDesktop, getResponsivePadding, fs, spacing, cardStyle, cardShadow } from '../../utils/responsive';
 import { useTheme } from '../../utils/ThemeContext';
 import { getTenantComplaints, submitComplaint } from '../../services/dataService';
+import useRealtimeRefresh from '../../hooks/useRealtimeRefresh';
 
 export default function TenantComplaintsScreen({ user }) {
   const { colors } = useTheme();
@@ -23,7 +24,6 @@ export default function TenantComplaintsScreen({ user }) {
 
   const loadComplaints = async () => {
     try {
-      setLoading(true);
       setError(null);
       const data = await getTenantComplaints(user?.tenant_id);
       setComplaints(data);
@@ -37,6 +37,10 @@ export default function TenantComplaintsScreen({ user }) {
   useEffect(() => {
     loadComplaints();
   }, [user?.tenant_id]);
+
+  useRealtimeRefresh(`tenant-complaints-${user?.tenant_id || 'unknown'}`, [
+    { table: 'complaints', filter: `tenant_id=eq.${user?.tenant_id || ''}` },
+  ], loadComplaints, Boolean(user?.tenant_id));
 
   const handleCreateComplaint = async () => {
     if (!newTitle.trim()) {

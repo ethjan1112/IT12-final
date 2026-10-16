@@ -17,6 +17,7 @@ import {
 } from '../../utils/responsive';
 import { getAnnouncements, addAnnouncement } from '../../services/dataService';
 import AnnouncementDetailsModal from '../../components/AnnouncementDetailsModal';
+import useRealtimeRefresh from '../../hooks/useRealtimeRefresh';
 
 export default function AnnouncementsScreen() {
   const { colors } = useTheme();
@@ -38,7 +39,6 @@ export default function AnnouncementsScreen() {
 
   const fetchAnnouncements = async () => {
     try {
-      setLoading(true);
       setError(null);
       const data = await getAnnouncements();
       setAnnouncements(data);
@@ -52,6 +52,8 @@ export default function AnnouncementsScreen() {
   useEffect(() => {
     fetchAnnouncements();
   }, []);
+
+  useRealtimeRefresh('landlord-announcements', [{ table: 'announcements' }], fetchAnnouncements);
 
   const handleCreateAnnouncement = async () => {
     if (!newTitle.trim()) {
