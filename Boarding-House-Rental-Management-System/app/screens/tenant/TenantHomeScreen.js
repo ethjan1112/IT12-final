@@ -88,7 +88,7 @@ export default function TenantHomeScreen({ user, onNavigateToNotifications, onNa
     return (
       <ScrollView
         style={{ flex: 1, backgroundColor: colors.bg }}
-        contentContainerStyle={{ paddingBottom: 24, alignItems: isDesktop ? 'center' : 'stretch' }}
+        contentContainerStyle={{ paddingBottom: spacing.sm, alignItems: isDesktop ? 'center' : 'stretch' }}
         showsVerticalScrollIndicator={false}
       >
         <View style={{ maxWidth: containerMaxWidth, width: '100%' }}>
@@ -143,7 +143,7 @@ export default function TenantHomeScreen({ user, onNavigateToNotifications, onNa
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{
-          paddingBottom: 24,
+          paddingBottom: spacing.sm,
           alignItems: isDesktop ? 'center' : 'stretch',
         }}
         showsVerticalScrollIndicator={false}
@@ -174,7 +174,7 @@ export default function TenantHomeScreen({ user, onNavigateToNotifications, onNa
             </Text>
           </View>
             {tenant.accountStatus === 'approved' ? (
-            <View style={{ paddingHorizontal: padding, gap: spacing.xl, paddingBottom: 24 }}>
+            <View style={{ paddingHorizontal: padding, gap: spacing.xl, paddingBottom: 0 }}>
             {/* ── Outstanding Balance Hero Card ────────────── */}
             <View style={{
               borderRadius: 26,
