@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StatusBar, TouchableOpacity, Platform, Modal, Pressable, Text, ScrollView } from 'react-native';
+import { BackHandler, View, StatusBar, TouchableOpacity, Platform, Modal, Pressable, Text, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { isDesktop, isMobile, safeAreaTop, fs, spacing } from './utils/responsive';
 import { useTheme } from './utils/ThemeContext';
@@ -103,11 +103,31 @@ export default function LandlordApp({ user, onLogout }) {
     setNavigationParams(params);
   };
 
+  useEffect(() => {
+    if (Platform.OS !== 'android') return undefined;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (menuVisible) {
+        setMenuVisible(false);
+        return true;
+      }
+      if (activeScreen === 'tenant-detail') {
+        handleNavigate('finances', { filter: navigationParams?.returnFilter || 'all' });
+        return true;
+      }
+      if (activeScreen !== 'dashboard') {
+        handleNavigate('dashboard');
+        return true;
+      }
+      return false;
+    });
+    return () => subscription.remove();
+  }, [activeScreen, menuVisible, navigationParams]);
+
   const renderScreen = () => {
     // Create navigation object for screens that need it
     const navigation = {
       navigate: (screen, params) => handleNavigate(screen, params),
-      goBack: () => handleNavigate('finances'),
+      goBack: () => handleNavigate('finances', { filter: navigationParams?.returnFilter || 'all' }),
     };
 
     switch (activeScreen) {
@@ -148,7 +168,7 @@ export default function LandlordApp({ user, onLogout }) {
   };
 
   const handleMenuNavigate = (screen) => {
-    setActiveScreen(screen);
+    handleNavigate(screen);
     closeMenu();
   };
 

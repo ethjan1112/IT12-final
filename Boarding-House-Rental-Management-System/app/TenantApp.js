@@ -1,8 +1,8 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { View, StatusBar, Platform } from 'react-native';
+import { BackHandler, View, StatusBar, Platform } from 'react-native';
 import { isDesktop } from './utils/responsive';
 import { useTheme } from './utils/ThemeContext';
-import { getAnnouncements, getTenantNotifications } from './services/dataService';
+import { getAnnouncements, getCurrentTenant, getTenantNotifications } from './services/dataService';
 import { getLastSeen, getAnnouncementTime } from './utils/announcementSeen';
 import useRealtimeRefresh from './hooks/useRealtimeRefresh';
 
@@ -25,9 +25,37 @@ export default function TenantApp({ user, onLogout }) {
   const { isDark, toggleTheme, colors } = useTheme();
 
   const [notificationBadge, setNotificationBadge] = useState(0);
+  const [notificationItems, setNotificationItems] = useState([]);
+  const [tenantAccountStatus, setTenantAccountStatus] = useState(null);
   const [realtimeVersion, setRealtimeVersion] = useState(0);
 
   useEffect(() => setTenantUser(user), [user]);
+
+  useEffect(() => {
+    let active = true;
+    if (!tenantUser?.tenant_id) {
+      setTenantAccountStatus(null);
+      return () => { active = false; };
+    }
+    getCurrentTenant(tenantUser.tenant_id)
+      .then((tenant) => {
+        if (active) setTenantAccountStatus(tenant?.accountStatus || 'pending');
+      })
+      .catch(() => {
+        if (active) setTenantAccountStatus(null);
+      });
+    return () => { active = false; };
+  }, [tenantUser?.tenant_id, realtimeVersion]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return undefined;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (activeScreen === 'home') return false;
+      setActiveScreen('home');
+      return true;
+    });
+    return () => subscription.remove();
+  }, [activeScreen]);
 
   useRealtimeRefresh(`tenant-badge-${tenantUser?.tenant_id || 'unknown'}`, [
     { table: 'tenant_notifications', filter: `tenant_id=eq.${tenantUser?.tenant_id || ''}` },
@@ -49,11 +77,28 @@ export default function TenantApp({ user, onLogout }) {
           getTenantNotifications(tenantId).catch(() => []),
           getLastSeen(uid),
         ]);
-        const newAnnouncements = (announcements || []).filter((a) => getAnnouncementTime(a) > lastSeen).length;
+        const announcementItems = (announcements || []).map((item) => ({
+          id: `announcement-${item.announcement_id || item.id}`,
+          type: 'announcement',
+          title: item.title || 'Property update',
+          message: item.description || '',
+          created_at: new Date(getAnnouncementTime(item)).toISOString(),
+          read: getAnnouncementTime(item) <= lastSeen,
+        }));
+        const latestItems = [...(notifications || []), ...announcementItems]
+          .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+          .slice(0, 5);
+        const newAnnouncements = announcementItems.filter((a) => !a.read).length;
         const unreadNotifications = (notifications || []).filter((n) => !n.read).length;
-        if (active) setNotificationBadge(newAnnouncements + unreadNotifications);
+        if (active) {
+          setNotificationBadge(newAnnouncements + unreadNotifications);
+          setNotificationItems(latestItems);
+        }
       } catch {
-        if (active) setNotificationBadge(0);
+        if (active) {
+          setNotificationBadge(0);
+          setNotificationItems([]);
+        }
       }
     };
     refreshBadge();
@@ -73,7 +118,7 @@ export default function TenantApp({ user, onLogout }) {
       case 'finances':
         return 'My Finances';
       case 'application':
-        return 'Application';
+        return tenantAccountStatus === 'approved' ? 'Room & Application Details' : 'Application Setup';
       case 'notifications':
         return 'Notifications';
       case 'settings':
@@ -130,6 +175,10 @@ export default function TenantApp({ user, onLogout }) {
         title={getScreenTitle()}
         subtitle={getScreenSubtitle()}
         onLogout={onLogout}
+        onBackPress={activeScreen === 'application' ? () => setActiveScreen('home') : undefined}
+        notificationCount={notificationBadge}
+        notificationItems={notificationItems}
+        onNotificationsPress={() => setActiveScreen('notifications')}
         onSettingsPress={() => setActiveScreen('settings')}
         isDark={isDark}
         onThemeToggle={toggleTheme}
@@ -137,13 +186,13 @@ export default function TenantApp({ user, onLogout }) {
 
       {isDesktop ? (
         <View style={{ flex: 1, flexDirection: 'row' }}>
-          <TenantBottomNav user={tenantUser} activeScreen={activeScreen} onNavigate={setActiveScreen} badges={{ notifications: notificationBadge }} />
+          {activeScreen !== 'application' && <TenantBottomNav user={tenantUser} activeScreen={activeScreen} onNavigate={setActiveScreen} />}
           <View style={{ flex: 1 }}>{renderScreen()}</View>
         </View>
       ) : (
         <>
           <View style={{ flex: 1 }}>{renderScreen()}</View>
-          <TenantBottomNav user={tenantUser} activeScreen={activeScreen} onNavigate={setActiveScreen} badges={{ notifications: notificationBadge }} />
+          {activeScreen !== 'application' && <TenantBottomNav user={tenantUser} activeScreen={activeScreen} onNavigate={setActiveScreen} />}
         </>
       )}
     </View>

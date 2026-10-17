@@ -11,7 +11,7 @@ import useRealtimeRefresh from '../../hooks/useRealtimeRefresh';
 
 const TENANTS_PER_PAGE = 5;
 
-export default function TenantFinancialManagement({ initialFilter = 'all' }) {
+export default function TenantFinancialManagement({ initialFilter = 'all', navigation }) {
   const { colors } = useTheme();
   const padding = getResponsivePadding();
 
@@ -288,6 +288,29 @@ export default function TenantFinancialManagement({ initialFilter = 'all' }) {
 
                   {/* Action Buttons */}
                   <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <TouchableOpacity
+                      onPress={() => navigation?.navigate('tenant-detail', {
+                        tenantId: tenant.tenantId,
+                        returnFilter: activeFilter,
+                      })}
+                      accessibilityRole="button"
+                      accessibilityLabel={`View financial details for ${tenant.name}`}
+                      style={{
+                        flex: 1,
+                        backgroundColor: colors.card,
+                        borderWidth: 1,
+                        borderColor: colors.cardBorder,
+                        paddingVertical: 12,
+                        borderRadius: 10,
+                        alignItems: 'center',
+                        flexDirection: 'row',
+                        justifyContent: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      <Ionicons name="person-outline" size={18} color={colors.accent} />
+                      <Text style={{ fontSize: fs(14), fontWeight: '700', color: colors.accent }}>Details</Text>
+                    </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => handleRecordPayment(tenant)}
                       disabled={tenant.balance <= 0}
