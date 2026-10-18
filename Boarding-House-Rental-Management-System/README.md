@@ -1,4 +1,4 @@
-﻿# Boarding House Rental Management System
+# Boarding House Rental Management System
 
 A comprehensive mobile and web application for managing boarding house operations, built with React Native (Expo) and Firebase.
 
@@ -105,22 +105,14 @@ boarding-house-rental-management-system/
 
 ## 👥 User Roles
 
-### Owner Portal
-- Full system access
+### Landlord (Owner / Caretaker)
+- Owner and Caretaker are separate user accounts (each signs in with their own credentials) but the application consolidates both roles into a single administrative portal labeled "Landlord". Both Owner and Caretaker accounts access the same shared admin interface to manage tenants, rooms, billing, complaints, and announcements. This design centralizes administrative tasks in one portal. If you later need more granular separation, the code can be adjusted to route Owner and Caretaker to different containers.
 - Manage tenants (add, edit, delete, assign rooms)
 - Manage rooms (add rooms)
 - Create and terminate leases
 - View financial reports
 - Generate invoices
 - Record payments
-
-### Caretaker Portal
-- Manage day-to-day operations
-- View rooms and tenants
-- Handle complaints (update status)
-- Create announcements
-- View billing information
-- Manage room change requests
 
 ### Tenant Portal
 - View personal dashboard
@@ -217,6 +209,28 @@ npm run web        # Run on web
 - `FIRESTORE_SETUP.md` - Database schema and setup instructions
 - `CARETAKER_SYSTEM.md` - Caretaker features documentation
 - `firestore.rules` - Security rules (with inline comments)
+
+## Scope and Limitation
+
+This implementation focuses on a mobile- and web-based Boarding House Rental Management System for Nads & Gracy Boarding House in Tagum City. It supports three user types: Landlord (Owner/Caretaker), and Tenants. Owner and Caretaker are separate user accounts but the application consolidates both roles into a single shared administrative portal labeled "Landlord"; both Owner and Caretaker sign in with their own credentials and access the same administrative interface for managing tenants, rooms, billing, complaints, and announcements.
+
+The system is configured for the boarding house's 17 rooms (12 single-occupancy and 5 double-occupancy). The Caretaker can register tenants, record personal information, upload valid identification and payment proof images, and assign tenants to rooms or bed spaces. The application indicates which rooms or bed spaces are occupied or available, enabling the Caretaker to monitor availability and allowing tenants to check available rooms.
+
+Billing and payment records are supported. The Caretaker can record monthly rent, electricity charges (manually entered), and water bills. The system tracks payment due dates, approved payment extensions, unpaid balances, and payment records. Digital payment records and receipt references can be created for recorded payments, and tenants may upload receipt images for staff review. Tenants can view balances, payment history, due dates, and billing details through their accounts.
+
+For communication and maintenance, the system provides complaint reporting and in‑app notifications. Tenants submit concerns through the app and the Caretaker updates complaint status. Messages and announcements are stored in the database and shown in the app; however, push notifications (device push) are not included and must be added separately if required.
+
+Limitations:
+- The system is specific to Nads & Gracy Boarding House and does not support multi-property management.
+- There is no integrated online payment gateway (e.g., GCash, Maya, credit cards, or bank transfers); payments are manually verified and recorded by staff.
+- Push notifications are not implemented (only in-app notifications are available).
+- There are no automated backup scripts or scheduled exports in the repository; add a backup/export process for reliable offsite backups.
+- The app supports Android, iOS (via Expo), and Web; it is not limited to Android only.
+- Meter readings are entered manually by the Caretaker; there is no IoT integration.
+- Physical security integrations (electronic locks, biometrics, CCTV) are outside the scope.
+- Some payment logic assumes cash-based receipts; full electronic payment flows require development.
+- The codebase includes Firebase and optional Supabase helpers; runtime behavior depends on which backend is configured—ensure environment variables and project configuration are set accordingly.
+- Owner and Caretaker share a consolidated administrative portal; consider separating owner-only functions or routing caretakers to a dedicated limited interface in future work.
 
 ## 🤝 Contributing
 
